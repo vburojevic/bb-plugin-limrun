@@ -53,7 +53,7 @@ export function isRunLogPath(path: string, runId: string): boolean {
 }
 
 export const SHIM_MARKER = "bb-plugin-limrun shim";
-export const SHIM_VERSION = 4;
+export const SHIM_VERSION = 5;
 
 /** The shim's source. `installId` and the paths are baked in as JSON literals. */
 export function shimScript(options: { installId: string; binDir: string }): string {
@@ -197,9 +197,15 @@ if (isRun) {
   child.stdout.on("data", (c) => { process.stdout.write(c); track(c); });
   child.stderr.on("data", (c) => { process.stderr.write(c); track(c); });
 }
-// Ctrl-C reaches lim through the terminal's process group; forwarding it
-// would deliver it twice. Wait for lim to finish instead.
-process.on("SIGINT", () => {});
+// Ctrl-C reaches lim through the terminal's process group, so forwarding it
+// at once would deliver it twice. A SIGINT sent to the shim alone still has
+// to reach lim: forward it if lim is still running a second later.
+process.on("SIGINT", () => {
+  const timer = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) { try { child.kill("SIGINT"); } catch (_) {} }
+  }, 1000);
+  timer.unref();
+});
 for (const signal of ["SIGTERM", "SIGHUP"]) {
   process.on(signal, () => { try { child.kill(signal); } catch (_) {} });
 }

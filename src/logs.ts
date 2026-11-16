@@ -3,7 +3,8 @@
  *
  * The path comes from the shim, which runs in an agent's shell, so it is
  * untrusted: it must have the shim's own shape, its last component must not
- * be a symlink, and it must be a regular file this user owns. Otherwise any
+ * be a symlink, and it must be a regular file this user owns with a single
+ * link (a hard link is another name for some other file). Otherwise any
  * thread could point the card at another file the bb server can read.
  */
 import { constants } from "node:fs";
@@ -25,7 +26,8 @@ export async function readRunLog(path: string, runId: string): Promise<{ text: s
   }
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || (typeof process.getuid === "function" && stat.uid !== process.getuid())) return NOT_KEPT;
+    const ownedByUs = typeof process.getuid !== "function" || stat.uid === process.getuid();
+    if (!stat.isFile() || stat.nlink !== 1 || !ownedByUs) return NOT_KEPT;
     const start = Math.max(0, stat.size - TAIL_BYTES);
     const buffer = Buffer.alloc(stat.size - start);
     await handle.read(buffer, 0, buffer.length, start);

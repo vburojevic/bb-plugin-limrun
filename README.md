@@ -64,7 +64,7 @@ An agent whose shell is sandboxed needs network access to `api.limrun.com`, `*.l
 bb limrun status            connection, shim, and this thread's devices
 bb limrun devices           this thread's devices (live first, then recently ended)
 bb limrun runs              this thread's remote builds and tests
-bb limrun stop <id>         stop a device (inside a thread: only that thread's devices)
+bb limrun stop <id>         stop one of this thread's devices (the Limrun page stops any of this bb's)
 bb limrun shim install|status|uninstall
 ```
 

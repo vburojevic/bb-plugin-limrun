@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -21,6 +21,12 @@ describe("run logs", () => {
     symlinkSync(join(root, "secret.txt"), join(dir, "run_link.log"));
     const result = await readRunLog(join(dir, "run_link.log"), "run_link");
     expect(result.text).not.toContain("lim_secret");
+  });
+
+  it("refuses a hard link to another file", async () => {
+    writeFileSync(join(root, "config.yaml"), "api-key: lim_hardlinked\n");
+    linkSync(join(root, "config.yaml"), join(dir, "run_hard.log"));
+    expect((await readRunLog(join(dir, "run_hard.log"), "run_hard")).text).not.toContain("lim_hardlinked");
   });
 
   it("refuses something that is not a regular file", async () => {

@@ -5,7 +5,9 @@ import { stopThreadDevices, sweep } from "../src/cleanup";
 import { parseLimConfig, resolveApiKey } from "../src/key";
 import { threadOf } from "../src/labels";
 import { MIGRATIONS, createRunStore, statusOf, LOST_AFTER_MS } from "../src/runs";
+import { limrunCli } from "../src/cli";
 import { createService } from "../src/service";
+import { shimPaths } from "../src/shim";
 import { createFakeGateway, stored } from "./fake-gateway";
 
 const quiet = { info() {}, warn() {} };
@@ -203,6 +205,19 @@ describe("service", () => {
     await svc.stopLabeledDevice("ios_mine");
     expect(store.get("ios_mine")?.state).toBe("terminated");
     await expect(svc.stopLabeledDevice("ios_victim")).rejects.toThrow(/another bb/i);
+    expect(store.get("ios_victim")?.state).toBe("ready");
+  });
+
+  it("bb limrun stop needs a thread, so an agent can't stop another thread's device", async () => {
+    const { svc, store } = service(
+      createFakeGateway([stored({ id: "ios_victim", labels: { "bb-thread": "thr_victim", "bb-install": "me" } })]),
+    );
+    const cli = limrunCli({ service: svc, shimPaths: shimPaths("/tmp/unused"), installId: "me" });
+    const signal = new AbortController().signal;
+    const outside = await cli.run(["stop", "ios_victim"], { signal });
+    expect(outside.exitCode).not.toBe(0);
+    const other = await cli.run(["stop", "ios_victim"], { signal, threadId: "thr_attacker" });
+    expect(other.exitCode).not.toBe(0);
     expect(store.get("ios_victim")?.state).toBe("ready");
   });
 

@@ -120,15 +120,15 @@ export function limrunCli({ service, shimPaths, installId }: CliDeps) {
       }),
 
       stop: cliCommand({
-        summary: "Stop a Limrun device. In a thread, only that thread's devices",
+        summary: "Stop one of this thread's Limrun devices (the Limrun page stops any of this bb's devices)",
         positionals: [{ name: "id", description: "Instance id, such as ios_… or sandbox_…", required: true }],
         options: { json },
         async run(input, ctx) {
           const id = input.positionals.id;
-          await asCliError(async () => {
-            if (isThreadId(ctx.threadId)) await service.stopDevice(ctx.threadId, id);
-            else await service.stopLabeledDevice(id);
-          });
+          // Thread scoped only: bb does not verify BB_THREAD_ID, so a no-thread
+          // path would let any shell stop any thread's device.
+          const threadId = requireThread(ctx.threadId);
+          await asCliError(() => service.stopDevice(threadId, id));
           return {
             exitCode: 0,
             stdout: input.options.json ? JSON.stringify({ stopped: true, id }) : `Stopped ${id}.`,

@@ -187,6 +187,34 @@ describe("lim shim", () => {
     expect(lines(join(root, "lim-calls"))).toEqual([["ios", "list"]]);
   });
 
+  it("passes a SIGINT sent to the shim alone on to lim", async () => {
+    writeFileSync(
+      join(fakeBin, "lim"),
+      `#!${process.execPath}\nsetTimeout(() => process.exit(0), 15000);\n`,
+    );
+    chmodSync(join(fakeBin, "lim"), 0o755);
+    const { spawn } = await import("node:child_process");
+    const child = spawn(paths.script, ["xcode", "build", "."], {
+      env: {
+        PATH: `${paths.binDir}:${fakeBin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`,
+        HOME: home,
+      },
+      stdio: "ignore",
+      detached: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    process.kill(child.pid!, "SIGINT");
+    const code = await new Promise<number | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 5000);
+      child.on("exit", (exit) => {
+        clearTimeout(timer);
+        resolve(exit);
+      });
+    });
+    if (code === null) child.kill("SIGKILL");
+    expect(code).toBe(130);
+  });
+
   it("fails clearly when the real lim is missing", () => {
     const result = spawnSync(paths.script, ["ios", "list"], {
       env: { PATH: `${paths.binDir}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: home },
