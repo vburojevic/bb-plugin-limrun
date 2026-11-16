@@ -24,6 +24,7 @@ export function DevicePanel({ threadId }: { threadId: string }) {
     deps: [rpc, threadId],
   });
   const overview = useLimrunQuery(() => rpc.call("overview"), { threadId: null, deps: [rpc] });
+  const mode = useLimrunQuery(() => rpc.call("thread_mode", { threadId }), { threadId, deps: [rpc, threadId] });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -89,7 +90,7 @@ export function DevicePanel({ threadId }: { threadId: string }) {
           </div>
         </>
       ) : (
-        <EmptyState starting={starting} onStart={start} />
+        <EmptyState starting={starting} onStart={start} buildsOnLimrun={mode.data?.on ?? false} />
       )}
 
       {actionError !== null || state.data.error !== null ? (
@@ -268,9 +269,11 @@ function Stream({ threadId, device }: { threadId: string; device: DeviceDto }) {
 function EmptyState({
   starting,
   onStart,
+  buildsOnLimrun,
 }: {
   starting: ("iphone" | "ipad")[];
   onStart: (model: "iphone" | "ipad") => void;
+  buildsOnLimrun: boolean;
 }) {
   return (
     <Centered>
@@ -278,8 +281,10 @@ function EmptyState({
         <div className="space-y-1">
           <p className="text-sm font-medium">No Limrun simulator in this thread</p>
           <p className="text-xs text-muted-foreground">
-            Start one here, or turn on Limrun in the composer and ask the agent to run the app. It stops when
-            the thread is archived.
+            {buildsOnLimrun
+              ? "Start one here, or ask the agent to run the app."
+              : "Start one here, or turn on Limrun in the composer and ask the agent to run the app."}{" "}
+            It stops when the thread is archived.
           </p>
         </div>
         <div className="flex justify-center gap-2">

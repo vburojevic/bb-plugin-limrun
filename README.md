@@ -10,7 +10,7 @@
 - **Build on Limrun, per thread.** One toggle in the composer. With it on, bb hands the thread's agent (Claude Code, Codex, or an ACP agent) everything `lim` needs, plus instructions to build, test and run iOS targets only on Limrun. It works on whichever bb machine the thread runs, with nothing to install or sign in there.
 - **The simulator beside the chat.** The thread's Limrun tab streams its simulator with touch and keyboard. You can also start an iPhone or iPad there yourself.
 - **Builds above the composer.** Each remote build and test shows live, then passes or fails, with its log one click away.
-- **No forgotten devices.** Archiving or deleting a thread stops the simulators and Xcode sandboxes it started through bb (with Build on Limrun on, or from its Limrun tab). A sweep every 15 minutes catches any archive the plugin missed.
+- **No forgotten devices.** Archiving or deleting a thread stops every simulator and Xcode sandbox labeled with it: those started with Build on Limrun on, from its Limrun tab, or by an agent that added the `bb-thread` label itself. A sweep every 15 minutes catches any archive the plugin missed.
 - **A Limrun page** in the sidebar: connect, see what Limrun cost today and this month, and stop anything running.
 
 ## Get started

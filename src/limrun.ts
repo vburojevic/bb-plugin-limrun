@@ -212,7 +212,7 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
 
   async function getRaw(kind: DeviceKind, id: string) {
     try {
-      return await resource(kind).get(id).withResponse();
+      return await resource(kind).get(id);
     } catch (cause) {
       if (cause instanceof APIError && cause.status === 404) return null;
       throw describeFailure(cause);
@@ -238,7 +238,7 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
 
     async get(kind, id) {
       const found = await getRaw(kind, id);
-      return found === null ? null : toDevice(kind, found.data as RawInstance);
+      return found === null ? null : toDevice(kind, found as RawInstance);
     },
 
     createIos: (options) =>
@@ -266,7 +266,7 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
     async stream(id) {
       const found = await getRaw("ios", id);
       if (found === null) return null;
-      const status = found.data.status as { state: string; endpointWebSocketUrl?: string; streamToken?: string };
+      const status = found.status as { state: string; endpointWebSocketUrl?: string; streamToken?: string };
       // Only the stream-only token goes to a browser, never the full-control `token`.
       if (status.state !== "ready" || !status.endpointWebSocketUrl || !status.streamToken) return null;
       return { url: status.endpointWebSocketUrl, token: status.streamToken };

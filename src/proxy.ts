@@ -77,7 +77,9 @@ const ASSETS = /^\/v1\/assets(\/[A-Za-z0-9_\-/.]*)?$/;
  * A Limrun path the proxy will look at: `/v1/…`, no `.` or `..` segment, no
  * encoded dot, slash or backslash, and unchanged by URL normalization. Without
  * this, `/v1/ios_instances/<mine>/../<theirs>` passes the ownership check on
- * `<mine>` and fetch resolves it to someone else's device.
+ * `<mine>` and fetch resolves it to someone else's device. The segment check
+ * and the normalization check overlap on purpose: this is the one gate between
+ * a thread token and the whole Limrun org.
  */
 export function isPlainPath(path: string): boolean {
   if (!path.startsWith("/v1/") || /%2e|%2f|%5c|\\/i.test(path)) return false;

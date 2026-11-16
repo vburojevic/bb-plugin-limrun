@@ -92,7 +92,7 @@ function ThreadToggle({ threadId }: { threadId: string }) {
         if (trimmed.endsWith(opposite)) {
           composer.replace({ text: trimmed.slice(0, -opposite.length).trimEnd(), mentions: composer.draft.mentions });
         } else {
-          composer.insert(` ${switchNote(next.on)}`, { at: "end" });
+          composer.insert(trimmed === "" ? switchNote(next.on) : ` ${switchNote(next.on)}`, { at: "end" });
         }
         mode.refetch();
         setBusy(false);
