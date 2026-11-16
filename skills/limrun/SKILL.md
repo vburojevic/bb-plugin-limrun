@@ -1,54 +1,44 @@
 ---
 name: limrun
-description: How Limrun cloud simulators and remote Xcode builds work inside bb. Use whenever you run the lim CLI from a bb thread (lim ios create, lim xcode build, lim xcode test), so the device shows in the thread's Limrun panel, its builds show above the composer, and it stops when the thread is archived. Also covers bb limrun commands.
+description: How Limrun cloud simulators and remote Xcode builds work in bb threads, through the Limrun plugin's Build on Limrun mode. Use when a thread mentions Limrun, lim, cloud simulators or remote iOS builds, or when bb's instructions say this thread builds on Limrun. Also covers bb limrun commands.
 ---
 
 # Limrun in bb
 
-Drive devices and builds with Limrun's own `lim` CLI and Limrun's skills. This
-skill only adds what bb needs on top.
+## Build on Limrun is a per-thread switch
 
-## Every device belongs to this thread
+The person turns it on with the Limrun toggle in the thread's composer. When
+it is on, bb has already set up `lim` for the thread (LIM_API_ENDPOINT,
+LIM_API_KEY, LIM_WORKSPACE) and its instructions tell you how to build. Use
+`lim` if it is installed, otherwise `npx -y lim@0.57.3`.
 
-bb finds a thread's devices by the label `bb-thread=$BB_THREAD_ID`. A labeled
-simulator streams in the thread's **Limrun** side panel, where the person can
-watch and touch it, and every labeled device stops when the thread is archived.
+- Build: `lim xcode build . --scheme <Scheme> --sdk iphonesimulator`
+- Test: `lim xcode test . --scheme <Scheme>`
+- Run: `lim ios create --attach --reuse-if-exists` once; every successful
+  build then installs and relaunches on that simulator.
+- Never run local `xcodebuild`, `xcrun simctl` or a local Simulator for iOS,
+  iPadOS or watchOS targets in such a thread. macOS targets build locally.
+- Never run `lim login`, change the LIM_* variables, or print LIM_API_KEY. It
+  is a token for this thread only; the real key stays on the bb server.
 
-- Run `bb limrun status` first. It says whether the lim shim is on.
-- **Shim on:** it adds the label to `lim ios create` and `lim xcode create`, and
-  labels devices lim creates on its own (a build with no sandbox yet). Type
-  plain `lim`.
-- **Shim off:** add the label yourself, every time you create:
+Everything you create belongs to the thread: the person watches the simulator
+in the thread's Limrun tab, builds show above the composer, and it all stops
+when the thread is archived. A thread can see and stop only its own devices,
+and runs at most 2 simulators and 1 Xcode sandbox at a time.
 
-  ```sh
-  lim ios create --reuse-if-exists --label bb-thread=$BB_THREAD_ID
-  lim xcode create --reuse-if-exists --label bb-thread=$BB_THREAD_ID
-  ```
+## When the switch is off
 
-  Prefer `--reuse-if-exists` with the label over a second device: one simulator
-  per thread is the norm, and Limrun bills every minute each one runs.
-- Never use another label scheme for ownership (Limrun's skills suggest
-  `--label issue=<id>`; add it if you like, but keep `bb-thread`).
+`lim` does not reach Limrun through bb. If the person asks for Limrun, ask
+them to turn on the Limrun toggle in the composer; do not sign in yourself.
 
-## Remote builds show above the composer
+## Commands
 
-With the shim on, every `lim xcode build` and `lim xcode test` appears as a
-live card above the composer with its last log line and, at the end, a pass or
-fail verdict. You still read the result from lim's own output; the card is for
-the person.
+- `bb limrun status`: connection, whether this thread builds on Limrun, its devices.
+- `bb limrun devices`, `bb limrun runs`: this thread's devices and remote builds.
+- `bb limrun stop <id>`: stop one of this thread's devices.
 
-## Stopping devices
+## Sandboxed shells
 
-- `bb limrun devices` lists this thread's devices; `bb limrun stop <id>` stops
-  one. You can only stop this thread's devices.
-- Stop a device you are done with instead of leaving it to the idle timeout.
-- Never delete devices with `lim ios delete` unless you created them in this
-  thread: other threads and people share the Limrun org.
-
-## When something is off
-
-- `bb limrun status` says "not connected": the person must run `lim login` on
-  the Mac running bb. Do not ask for the API key and never print it.
-- The panel shows nothing after `lim ios create`: the device has no
-  `bb-thread` label. Recreate it with the label, or ask the person to run
-  `bb limrun shim install`.
+Builds and simulators stream to `*.limrun.com` and `*.limrun.net`. A shell
+sandbox that blocks those hosts makes `lim xcode build` fail; say so instead
+of retrying.

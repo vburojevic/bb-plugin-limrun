@@ -62,6 +62,11 @@ export function createBuildFollower(deps: FollowerDeps) {
       signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
     });
 
+  async function recordTimes(sandboxId: string, threadId: string, execId: string) {
+    const times = await (await deps.gateway()).buildTimes(sandboxId, execId);
+    if (times !== null) deps.runs.setTimes(threadId, execId, times.startedAt, times.endedAt);
+  }
+
   /** Streams one running build to its end, writing the run as it goes. */
   async function stream(sandbox: Device, threadId: string, state: BuildState, signal: AbortSignal) {
     const limrun = await deps.gateway();
@@ -76,7 +81,8 @@ export function createBuildFollower(deps: FollowerDeps) {
       signal,
       onEvent: (event) => {
         if (event.type !== "stdout" && event.type !== "stderr") return;
-        pending = (pending + event.data).slice(-4_096);
+        // Limrun sends one log line per event, usually without its newline.
+        pending = (pending + (event.data.endsWith("\n") ? event.data : `${event.data}\n`)).slice(-4_096);
         const now = (deps.now ?? Date.now)();
         if (now - lastPublished < 2_000) return;
         lastPublished = now;
@@ -90,6 +96,7 @@ export function createBuildFollower(deps: FollowerDeps) {
     if (signal.aborted) return;
     const done = final ?? { ...state, status: "FAILED" as const };
     deps.runs.end(threadId, state.execId, exitCodeOf(done), lastLineOf(pending));
+    await recordTimes(sandbox.id, threadId, state.execId);
     handled.set(sandbox.id, state.execId);
     deps.publish(threadId);
     deps.log.info("build finished", { threadId, sandbox: sandbox.id, execId: state.execId, status: done.status });
@@ -113,6 +120,7 @@ export function createBuildFollower(deps: FollowerDeps) {
             deps.runs.start({ id: state.execId, threadId, kind: kindOf(state.execId), command: `lim xcode ${kindOf(state.execId)}`, logPath: null });
             deps.runs.setSandbox(threadId, state.execId, sandbox.id);
             deps.runs.end(threadId, state.execId, exitCodeOf(state), null);
+            await recordTimes(sandbox.id, threadId, state.execId);
             handled.set(sandbox.id, state.execId);
             deps.publish(threadId);
           }

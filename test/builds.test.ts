@@ -46,7 +46,12 @@ describe("build follower", () => {
     let finish!: (state: BuildState) => void;
     fake.builds.set("xcode_sb", {
       state: { execId: "build-2", status: "RUNNING", exitCode: null },
-      events: [{ type: "stdout", data: "Compiling Hello.swift\nerror: missing return\nTip: use snapshots\n" }],
+      // One line per event, without newlines, as Limrun sends them.
+      events: [
+        { type: "stdout", data: "Compiling Hello.swift" },
+        { type: "stderr", data: "error: missing return" },
+        { type: "stdout", data: "Tip: use snapshots" },
+      ],
       finish: new Promise((resolve) => (finish = resolve)),
     });
     await wait(60);
@@ -60,6 +65,8 @@ describe("build follower", () => {
     expect(done.status).toBe("failed");
     expect(done.exitCode).toBe(65);
     expect(done.lastLine).toBe("error: missing return");
+    // Limrun's own times, not the moment bb noticed the build.
+    expect(done.endedAt! - done.startedAt).toBe(6_500);
   });
 
   it("records a fast build that finished between two polls", async () => {

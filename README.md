@@ -1,80 +1,64 @@
 <h1 align="center">Limrun for bb</h1>
 
-<p align="center"><b>See and steer a thread's <a href="https://limrun.com">Limrun</a> cloud simulator beside the chat,<br>follow its remote Xcode builds above the composer, and stop its devices when the thread is archived.</b></p>
+<p align="center"><b>Turn on Build on Limrun for a thread, and its agent builds, tests and runs iOS apps in <a href="https://limrun.com">Limrun</a>'s cloud<br>instead of on your Mac. Watch the simulator beside the chat, follow builds above the composer, and nothing keeps running after the thread is archived.</b></p>
 
 <p align="center">
 <a href="https://getbb.app"><img src="https://img.shields.io/badge/bb-%E2%89%A5%200.49-57606a?style=flat-square" alt="Requires bb 0.49 or later"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-57606a?style=flat-square" alt="MIT license"></a>
 </p>
 
-Agents keep driving devices with Limrun's own `lim` CLI and Limrun's skills. This plugin adds what only bb can show:
+- **Build on Limrun, per thread.** One toggle in the composer. With it on, bb hands the thread's agent (Claude Code, Codex, or an ACP agent) everything `lim` needs, plus instructions to build, test and run iOS targets only on Limrun. It works on whichever bb machine the thread runs, with nothing to install or sign in there.
+- **The simulator beside the chat.** The thread's Limrun tab streams its simulator with touch and keyboard. You can also start an iPhone or iPad there yourself.
+- **Builds above the composer.** Each remote build and test shows live, then passes or fails, with its log one click away.
+- **No forgotten devices.** Archiving or deleting a thread stops its simulators and Xcode sandboxes. A sweep every 15 minutes catches any archive the plugin missed.
+- **A Limrun page** in the sidebar: connect, see what Limrun cost today and this month, and stop anything running.
 
-- **A Limrun tab in every thread.** The thread's simulator streams beside the conversation with touch and keyboard. Start an iPhone or iPad from the tab, or let the agent run `lim ios create`; it shows up either way. Stop it with two clicks.
-- **Remote builds above the composer.** Each `lim xcode build` and `lim xcode test` shows as a live card with its last log line, then a pass or fail verdict and the full log.
-- **No forgotten devices.** Archiving or deleting a thread stops its simulators and Xcode sandboxes. A sweep every 15 minutes catches archives that happened while the plugin was not running.
-- **A Limrun page in the sidebar** with the connection, the org's spend today and this month, and every device running right now.
+## Get started
 
-## Install
+1. Install the plugin:
 
-```sh
-bb plugin install vburojevic/bb-plugin-limrun
+   ```sh
+   bb plugin install vburojevic/bb-plugin-limrun
+   ```
+
+2. Open the Limrun page in bb's sidebar and paste a Limrun API key (console.limrun.com, Settings, API Keys).
+3. In a new or existing thread of an iOS project, turn on the **Limrun** toggle in the composer, and ask the agent to build or run the app.
+
+That's all. You don't need `lim login`, PATH changes, or per-machine setup. Agents use `lim` if it's installed and otherwise run it through `npx` (Node 20 or later).
+
+## How it works
+
+```text
+agent's lim ──▶ bb server (the plugin's proxy) ──▶ api.limrun.com
+   │               adds the API key, the thread's labels,
+   │               and allows only this thread's devices
+   └──────────────▶ the device itself (build sync, screen, taps), with its own instance token
 ```
 
-Then, on the Mac that runs bb:
-
-```sh
-npm install --global lim     # Limrun's CLI, Node 20 or later
-lim login                    # or set LIM_API_KEY for the bb server
-bb limrun shim install       # optional, recommended: prints a PATH line for your shell profile
-```
-
-The plugin uses the same API key as `lim`: `LIM_API_KEY` in the bb server's environment, otherwise the key `lim login` saved in `~/.lim/config.yaml`. The key never leaves the server. The browser only gets one simulator's stream URL and its stream-only token.
-
-For agents, install Limrun's own skills too (`lim skills install --agents claude`), or its Claude Code plugin (`/plugin marketplace add limrun-inc/skills`, then `/plugin install limrun@limrun`).
-
-## How a device finds its thread
-
-A thread's devices are the Limrun instances labeled `bb-thread=<thread id>`. Three things add that label:
-
-| Who creates the device | How it gets the label |
-| --- | --- |
-| The Limrun tab's Start buttons | The plugin labels it. |
-| An agent, with the shim on | The shim adds `--label bb-thread=…` to `lim ios create` and `lim xcode create`, and labels devices `lim` creates on its own (a build with no sandbox yet). |
-| An agent, without the shim | The bundled skill tells the agent to add `--label bb-thread=$BB_THREAD_ID` itself. |
-
-The plugin also adds `bb-install=<id>`, naming this bb installation. The periodic sweep only stops devices with this installation's label, so it never touches devices another bb or another person in the same Limrun org started.
-
-## The `lim` shim
-
-Limrun can't push build events to a bb on a laptop: its webhooks need a public HTTPS host. So the plugin learns about agents' devices and builds by standing in front of `lim` on `PATH`.
-
-- It does nothing outside a bb thread, or with `BB_LIMRUN_SHIM=off`: it runs the real `lim` with the same arguments, output and exit code.
-- Inside a thread it does three things. It adds the thread label to creates. It tees `lim xcode build` and `lim xcode test` output to `$TMPDIR/bb-limrun/<run>.log` and reports start, last line and exit code. It reports instance ids that appeared in `~/.lim/last-instances.json`.
-- Every report is best effort with a timeout, and a failed log write never fails the command.
-
-Commands: `bb limrun shim install`, `bb limrun shim status`, `bb limrun shim uninstall`.
-
-## Sandboxed agents
-
-An agent whose shell is sandboxed needs network access to `api.limrun.com`, `*.limrun.com` and `*.limrun.net`, or every `lim` command fails. Limrun's docs list the same hosts. The shim writes its build logs to the agent's own temp folder, which sandboxes allow.
+- **The key stays on the bb server.** bb shows the environment it gives an agent in the thread's timeline, so the agent never gets the key. It gets `LIM_API_ENDPOINT`, pointing at the plugin's proxy route on the bb server, and a `LIM_API_KEY` token that works only through that proxy and only for that thread.
+- **Labels make ownership.** The proxy adds `bb-thread=<thread id>` and `bb-install=<id>` to every device the thread creates. The thread can list, use and stop only its own devices, plus upload assets. Everything else in the Limrun org is refused. Each thread runs at most 2 simulators and 1 Xcode sandbox at a time.
+- **Builds are followed from the server.** For each Xcode sandbox of a Build on Limrun thread, the plugin reads Limrun's build stream and verdict (`SUCCEEDED`, `FAILED`, `CANCELLED`) for the build card. Nothing is installed on the thread's machine.
+- **New threads.** The toggle in the new-thread composer marks the selected project for 30 minutes. The first message you send in a new thread there switches that thread on before its agent starts.
+- **Mid-thread.** Flipping the toggle in a running thread also adds a one-line note to your next message, because an agent's standing instructions only change when its session restarts.
 
 ## Commands
 
 ```text
-bb limrun status            connection, shim, and this thread's devices
-bb limrun devices           this thread's devices (live first, then recently ended)
-bb limrun runs              this thread's remote builds and tests
-bb limrun stop <id>         stop one of this thread's devices (the Limrun page stops any of this bb's)
-bb limrun shim install|status|uninstall
+bb limrun status       connection, whether this thread builds on Limrun, its devices
+bb limrun devices      this thread's devices (live first, then recently ended)
+bb limrun runs         this thread's remote builds and tests
+bb limrun stop <id>    stop one of this thread's devices (the Limrun page stops any of this bb's)
 ```
 
 Every command takes `--json`.
 
-## Limits
+## Good to know
 
-- iOS only: simulators and Xcode sandboxes. Android emulators and Gradle sandboxes are not shown.
-- The shim and the build logs live on the machine that runs the bb server. Threads on another enrolled machine get their devices labeled only when that machine's shell has the shim on `PATH`.
-- Limrun is in early access, and its CLI changes quickly. The plugin pins `@limrun/api` 0.73.2 and `@limrun/ui` 0.20.6 and was checked against `lim` 0.57.3.
+- iOS, iPadOS and watchOS only. macOS targets still build locally: Limrun's Xcode sandboxes have no macOS SDK. Android is not covered.
+- A sandboxed agent shell needs network access to `*.limrun.com` and `*.limrun.net`, where builds sync and simulators stream.
+- `lim` reaches the proxy through `LIM_API_ENDPOINT`, which `lim` reads but Limrun doesn't document. The plugin pins and tests `lim` 0.57.3.
+- Without a key pasted in bb, the plugin falls back to `LIM_API_KEY` in the bb server's environment, then to `lim login` on the bb server's Mac.
+- v0.1's `lim` shim is retired. v0.2 deletes the shim file, so remove the `bb Limrun plugin` PATH line from your shell profile if you added it.
 
 ## Development
 

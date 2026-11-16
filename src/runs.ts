@@ -134,6 +134,16 @@ export function createRunStore(db: Database.Database, now: () => number = Date.n
       return row === undefined ? null : toRun(row);
     },
 
+    /** Limrun's own start and end times, which beat the moment bb noticed the build. */
+    setTimes(threadId: string, id: string, startedAt: number, endedAt: number): void {
+      db.prepare(`UPDATE runs SET started_at = ?, ended_at = ? WHERE id = ? AND thread_id = ? AND ended_at IS NOT NULL`).run(
+        startedAt,
+        endedAt,
+        id,
+        threadId,
+      );
+    },
+
     setSandbox(threadId: string, id: string, sandboxId: string): void {
       db.prepare(`UPDATE runs SET sandbox_id = ? WHERE id = ? AND thread_id = ?`).run(sandboxId, id, threadId);
     },

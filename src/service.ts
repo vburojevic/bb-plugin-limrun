@@ -43,8 +43,7 @@ export interface ServiceDeps {
   now?: () => number;
 }
 
-const NO_KEY =
-  "No Limrun API key. Run `lim login` on this Mac (or set LIM_API_KEY for the bb server), then reload the plugin view.";
+const NO_KEY = "No Limrun API key yet. Paste one on bb's Limrun page.";
 const DEVICE_CACHE_MS = 4_000;
 
 function isLive(device: Device): boolean {

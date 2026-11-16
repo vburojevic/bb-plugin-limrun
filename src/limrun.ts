@@ -96,6 +96,8 @@ export interface LimrunGateway {
   ): Promise<BuildState | null>;
   /** The tail of a build's log: the live stream while running, the stored log after. */
   buildLog(sandboxId: string, execId: string): Promise<string | null>;
+  /** When a finished build started and ended, as Limrun recorded it. */
+  buildTimes(sandboxId: string, execId: string): Promise<{ startedAt: number; endedAt: number } | null>;
 }
 
 export const LIVE_STATES = ["creating", "assigned", "ready"] as const;
@@ -333,6 +335,17 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
         if (stored?.downloadUrl === undefined) return null;
         const response = await fetch(stored.downloadUrl);
         return response.ok ? (await response.text()).slice(-64 * 1024) : null;
+      } catch {
+        return null;
+      }
+    },
+
+    async buildTimes(sandboxId, execId) {
+      try {
+        const log = (await client.xcodeInstances.listBuildLogs(sandboxId)).find((entry) => entry.id === execId);
+        const startedAt = log?.startedAt === undefined ? NaN : Date.parse(log.startedAt);
+        const endedAt = log?.finishedAt === undefined ? NaN : Date.parse(log.finishedAt);
+        return Number.isFinite(startedAt) && Number.isFinite(endedAt) ? { startedAt, endedAt } : null;
       } catch {
         return null;
       }

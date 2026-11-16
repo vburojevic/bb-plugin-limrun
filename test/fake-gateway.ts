@@ -118,6 +118,9 @@ export function createFakeGateway(seed: Stored[] = []) {
       const build = builds.get(sandboxId);
       return build?.state.execId === execId ? (build.events ?? []).map((event) => event.data).join("") : null;
     },
+    async buildTimes() {
+      return { startedAt: 1_000, endedAt: 7_500 };
+    },
     async usage(options): Promise<Usage> {
       const zero = { billedMinutes: 0, runtimeMinutes: 0, cost: 0, count: 0 };
       return { from: options.from, to: options.to, ios: zero, xcode: zero };

@@ -34,7 +34,7 @@ export function OrgPage() {
           {org.data === null ? (
             <Muted>{org.error ?? "Loading…"}</Muted>
           ) : org.data.error !== null ? (
-            <Muted>{org.data.error}</Muted>
+            <Muted>{overview.data?.connected === false ? "Connect Limrun to see usage." : org.data.error}</Muted>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <UsageTile label="Today" usage={org.data.today} />
@@ -144,7 +144,7 @@ function Connection({
           {busy ? "Checking…" : "Connect"}
         </Button>
       </div>
-      {error !== null || overview.error !== null ? (
+      {error !== null || (overview.keySource !== null && overview.error !== null) ? (
         <p role="alert" className="text-xs text-destructive">
           {error ?? overview.error}
         </p>
