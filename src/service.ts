@@ -23,13 +23,6 @@ export interface Connection {
   error: string | null;
 }
 
-export interface ThreadUsage {
-  /** Minutes the thread's devices have run, from their own records. */
-  deviceMinutes: number;
-  /** Limrun's billed figures for the thread's label, when analytics answered. */
-  billed: Usage | null;
-}
-
 export interface OrgOverview {
   today: Usage | null;
   month: Usage | null;
@@ -62,13 +55,6 @@ function kindOfId(id: string): DeviceKind | null {
   if (id.startsWith("ios_")) return "ios";
   if (id.startsWith("sandbox_") || id.startsWith("xcode_")) return "xcode";
   return null;
-}
-
-export function minutesBetween(from: string, to: string | null, now: number): number {
-  const start = Date.parse(from);
-  const end = to === null ? now : Date.parse(to);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-  return (end - start) / 60_000;
 }
 
 export function createService(deps: ServiceDeps) {
@@ -124,40 +110,14 @@ export function createService(deps: ServiceDeps) {
       }
     },
 
-    async threadState(threadId: string): Promise<{ devices: Device[]; runs: Run[] }> {
-      const runs = deps.runs.forThread(threadId);
+    async threadState(threadId: string): Promise<{ devices: Device[] }> {
       const devices = await threadDevices(threadId);
-      return {
-        // Live devices first, then the five most recent ended ones for context.
-        devices: [...devices.filter(isLive), ...devices.filter((device) => !isLive(device)).slice(0, 5)],
-        runs,
-      };
+      // Live devices first, then the five most recent ended ones for context.
+      return { devices: [...devices.filter(isLive), ...devices.filter((device) => !isLive(device)).slice(0, 5)] };
     },
 
     runs(threadId: string): Run[] {
       return deps.runs.forThread(threadId);
-    },
-
-    async threadUsage(threadId: string): Promise<ThreadUsage> {
-      const devices = await threadDevices(threadId);
-      const deviceMinutes = devices.reduce(
-        (total, device) => total + minutesBetween(device.createdAt, device.endedAt, now()),
-        0,
-      );
-      let billed: Usage | null = null;
-      const oldest = devices.at(-1)?.createdAt;
-      if (oldest !== undefined) {
-        try {
-          billed = await (await gateway()).usage({
-            from: new Date(Date.parse(oldest) - 86_400_000).toISOString(),
-            to: new Date(now()).toISOString(),
-            labels: threadSelector(threadId),
-          });
-        } catch {
-          billed = null;
-        }
-      }
-      return { deviceMinutes, billed };
     },
 
     /** Starts the thread's simulator, or joins a start already in flight. */
@@ -197,7 +157,7 @@ export function createService(deps: ServiceDeps) {
       changed(threadId);
     },
 
-    /** Stops any device bb labeled, from the org page or a person's terminal. */
+    /** Stops a device this bb installation labeled, from the org page or a person's terminal. */
     async stopLabeledDevice(id: string): Promise<Device> {
       const kind = kindOfId(id);
       if (kind === null) throw new LimrunFailure(`"${id}" is not a Limrun instance id.`, "not-found");
@@ -206,6 +166,9 @@ export function createService(deps: ServiceDeps) {
       if (device === null) throw new LimrunFailure("That Limrun instance no longer exists.", "not-found");
       if (device.threadId === null) {
         throw new LimrunFailure("bb only stops devices labeled with a bb thread. Stop this one with lim.", "failed");
+      }
+      if (device.installId !== deps.installId) {
+        throw new LimrunFailure("Another bb started this device. Stop it from that bb or with lim.", "failed");
       }
       await limrun.remove(kind, id);
       deps.log.info("stopped device", { id, threadId: device.threadId, reason: "requested" });

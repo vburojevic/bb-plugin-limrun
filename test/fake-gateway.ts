@@ -86,7 +86,7 @@ export function createFakeGateway(seed: Stored[] = []) {
     async stream(id): Promise<StreamCredentials | null> {
       const item = store.get(id);
       if (item === undefined || item.state !== "ready") return null;
-      return { url: `wss://fake/${id}`, token: "stream-token", streamOnly: true };
+      return { url: `wss://fake/${id}`, token: "stream-token" };
     },
     async usage(options): Promise<Usage> {
       const zero = { billedMinutes: 0, runtimeMinutes: 0, cost: 0, count: 0 };

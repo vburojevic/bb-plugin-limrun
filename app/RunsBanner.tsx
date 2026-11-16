@@ -17,7 +17,7 @@ import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
 import type { RunDto } from "../src/contract";
-import { elapsed, runTitle } from "./format";
+import { elapsed, runStatus, runTitle } from "./format";
 import { errorText, useLimrunQuery, useLimrunRpc, useNow } from "./hooks";
 
 const KEEP_FINISHED_MS = 30 * 60_000;
@@ -29,18 +29,19 @@ export function RunsBanner() {
 }
 
 function visibleRuns(runs: RunDto[], now: number): RunDto[] {
-  return runs.filter(
-    (run) => run.status === "running" || (!run.dismissed && now - run.lastActivityAt < KEEP_FINISHED_MS),
-  );
+  return runs
+    .map((run) => ({ ...run, status: runStatus(run, now) }))
+    .filter((run) => run.status === "running" || (!run.dismissed && now - run.lastActivityAt < KEEP_FINISHED_MS));
 }
 
 function RunsCard({ threadId }: { threadId: string }) {
   const rpc = useLimrunRpc();
   const panel = useAppPanel();
   const { data } = useLimrunQuery(() => rpc.call("thread_runs", { threadId }), { threadId, deps: [rpc, threadId] });
-  const running = (data?.runs ?? []).some((run) => run.status === "running");
-  const now = useNow(running || (data?.runs.length ?? 0) > 0, running ? 1000 : 30_000);
+  const reporting = (data?.runs ?? []).some((run) => run.status === "running");
+  const now = useNow(reporting || (data?.runs.length ?? 0) > 0, reporting ? 1000 : 30_000);
   const runs = visibleRuns(data?.runs ?? [], now);
+  const running = runs.some((run) => run.status === "running");
   if (runs.length === 0) return null;
 
   const lead = runs.find((run) => run.status === "running") ?? runs[0]!;

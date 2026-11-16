@@ -75,7 +75,13 @@ export function OrgPage() {
           ) : (
             <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
               {org.data.live.map((device) => (
-                <LiveRow key={device.id} device={device} now={now} onStopped={org.refetch} />
+                <LiveRow
+                  key={device.id}
+                  device={device}
+                  now={now}
+                  ours={device.installId === org.data!.installId}
+                  onStopped={org.refetch}
+                />
               ))}
             </ul>
           )}
@@ -111,7 +117,17 @@ function UsageTile({ label, usage }: { label: string; usage: UsageDto | null }) 
   );
 }
 
-function LiveRow({ device, now, onStopped }: { device: DeviceDto; now: number; onStopped: () => void }) {
+function LiveRow({
+  device,
+  now,
+  ours,
+  onStopped,
+}: {
+  device: DeviceDto;
+  now: number;
+  ours: boolean;
+  onStopped: () => void;
+}) {
   const rpc = useLimrunRpc();
   const navigate = useBbNavigate();
   const [confirming, setConfirming] = useState(false);
@@ -125,16 +141,16 @@ function LiveRow({ device, now, onStopped }: { device: DeviceDto; now: number; o
         <p className="truncate">{device.displayName ?? deviceName(device)}</p>
         <p className="truncate text-xs text-muted-foreground">
           {deviceName(device)} · {stateLabel(device)} · {minutes(deviceMinutes(device, now))}
-          {threadId === null ? " · not from a bb thread" : ""}
+          {threadId === null ? " · not from a bb thread" : ours ? "" : " · another bb's device"}
           {error === null ? "" : ` · ${error}`}
         </p>
       </div>
-      {threadId !== null ? (
+      {ours && threadId !== null ? (
         <Button size="sm" variant="ghost" onClick={() => navigate.toThread(threadId)}>
           Open thread
         </Button>
       ) : null}
-      {threadId !== null ? (
+      {ours && threadId !== null ? (
         confirming ? (
           <Button
             size="sm"

@@ -42,7 +42,7 @@ describe.runIf(live)("real Limrun", () => {
 
     const stream = await gateway.stream(device.id);
     expect(stream).not.toBeNull();
-    console.log("stream", { url: stream!.url.replace(/\?.*/, ""), streamOnly: stream!.streamOnly });
+    console.log("stream", { url: stream!.url.replace(/\?.*/, "") });
 
     const relabeled = await gateway.addLabels("ios", device.id, { "bb-check": "patched" });
     expect(relabeled?.threadId).toBe(thread);
@@ -58,7 +58,6 @@ describe.runIf(live)("real Limrun", () => {
     const usage = await gateway.usage({
       from: new Date(Date.now() - 86_400_000).toISOString(),
       to: new Date().toISOString(),
-      labels: threadSelector(thread),
     });
     console.log("usage", JSON.stringify(usage));
   }, 300_000);

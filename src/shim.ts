@@ -53,7 +53,7 @@ export function isRunLogPath(path: string, runId: string): boolean {
 }
 
 export const SHIM_MARKER = "bb-plugin-limrun shim";
-export const SHIM_VERSION = 3;
+export const SHIM_VERSION = 4;
 
 /** The shim's source. `installId` and the paths are baked in as JSON literals. */
 export function shimScript(options: { installId: string; binDir: string }): string {
@@ -83,6 +83,16 @@ process.on("uncaughtException", (error) => {
 const thread = process.env.BB_THREAD_ID || "";
 const active = /^thr_[A-Za-z0-9_-]{1,64}$/.test(thread) && process.env.BB_LIMRUN_SHIM !== "off";
 
+function isShim(file) {
+  let fd = null;
+  try {
+    fd = fs.openSync(file, "r");
+    const head = Buffer.alloc(256);
+    const read = fs.readSync(fd, head, 0, head.length, 0);
+    return head.subarray(0, read).toString("utf8").includes(${JSON.stringify(SHIM_MARKER)});
+  } catch (_) { return false; } finally { if (fd !== null) try { fs.closeSync(fd); } catch (_) {} }
+}
+
 function realLim() {
   let self = "";
   try { self = fs.realpathSync(C.binDir); } catch (_) { self = C.binDir; }
@@ -92,7 +102,10 @@ function realLim() {
     try { resolved = fs.realpathSync(dir); } catch (_) { continue; }
     if (resolved === self) continue;
     const candidate = path.join(dir, "lim");
-    try { fs.accessSync(candidate, fs.constants.X_OK); return candidate; } catch (_) {}
+    try { fs.accessSync(candidate, fs.constants.X_OK); } catch (_) { continue; }
+    // Another bb's shim (a second bb, a dev bb) is not the real lim.
+    if (isShim(candidate)) continue;
+    return candidate;
   }
   return null;
 }
@@ -184,7 +197,10 @@ if (isRun) {
   child.stdout.on("data", (c) => { process.stdout.write(c); track(c); });
   child.stderr.on("data", (c) => { process.stderr.write(c); track(c); });
 }
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+// Ctrl-C reaches lim through the terminal's process group; forwarding it
+// would deliver it twice. Wait for lim to finish instead.
+process.on("SIGINT", () => {});
+for (const signal of ["SIGTERM", "SIGHUP"]) {
   process.on(signal, () => { try { child.kill(signal); } catch (_) {} });
 }
 child.on("error", (error) => {
@@ -192,7 +208,7 @@ child.on("error", (error) => {
   process.exit(127);
 });
 child.on("close", (code, signal) => {
-  const exitCode = code === null ? (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1) : code;
+  const exitCode = code !== null ? code : 128 + ((signal && os.constants.signals[signal]) || 0);
   if (ticker) clearInterval(ticker);
   if (logStream) logStream.end();
   let fresh = [];

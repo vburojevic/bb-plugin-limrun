@@ -5,7 +5,7 @@ import { stopThreadDevices, sweep } from "../src/cleanup";
 import { parseLimConfig, resolveApiKey } from "../src/key";
 import { threadOf } from "../src/labels";
 import { MIGRATIONS, createRunStore, statusOf, LOST_AFTER_MS } from "../src/runs";
-import { createService, minutesBetween } from "../src/service";
+import { createService } from "../src/service";
 import { createFakeGateway, stored } from "./fake-gateway";
 
 const quiet = { info() {}, warn() {} };
@@ -193,13 +193,23 @@ describe("service", () => {
     expect(store.get("ios_taken")?.labels["bb-thread"]).toBe("thr_two");
   });
 
+  it("stops by id only devices this install labeled", async () => {
+    const { svc, store } = service(
+      createFakeGateway([
+        stored({ id: "ios_mine", labels: { "bb-thread": "thr_one", "bb-install": "me" } }),
+        stored({ id: "ios_victim", labels: { "bb-thread": "thr_other", "bb-install": "someone-else" } }),
+      ]),
+    );
+    await svc.stopLabeledDevice("ios_mine");
+    expect(store.get("ios_mine")?.state).toBe("terminated");
+    await expect(svc.stopLabeledDevice("ios_victim")).rejects.toThrow(/another bb/i);
+    expect(store.get("ios_victim")?.state).toBe("ready");
+  });
+
   it("refuses to stop a device no bb thread owns", async () => {
     const { svc } = service(createFakeGateway([stored({ id: "ios_person", labels: {} })]));
     await expect(svc.stopLabeledDevice("ios_person")).rejects.toThrow(/only stops devices labeled/);
   });
 
-  it("counts device minutes from Limrun's own timestamps", () => {
-    expect(minutesBetween("2026-11-16T10:00:00Z", "2026-11-16T10:12:30Z", 0)).toBe(12.5);
-    expect(minutesBetween("2026-11-16T10:00:00Z", null, Date.parse("2026-11-16T10:03:00Z"))).toBe(3);
-  });
+
 });

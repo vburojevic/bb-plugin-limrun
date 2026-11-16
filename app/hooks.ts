@@ -39,19 +39,20 @@ export function useLimrunQuery<T>(
   const [error, setError] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
-  const inFlight = useRef(false);
+  // Every fetch gets a number; only the newest one may set state, so an
+  // answer for the previous thread never lands in the next one.
+  const generation = useRef(0);
 
   const refetch = useCallback(() => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+    const mine = ++generation.current;
     loadRef.current().then(
       (value) => {
-        inFlight.current = false;
+        if (mine !== generation.current) return;
         setData(value);
         setError(null);
       },
       (cause) => {
-        inFlight.current = false;
+        if (mine !== generation.current) return;
         setError(errorText(cause));
       },
     );

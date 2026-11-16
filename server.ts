@@ -11,7 +11,7 @@
  *   archive that happened while the plugin was not loaded.
  */
 import { randomBytes } from "node:crypto";
-import { open, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
@@ -21,6 +21,7 @@ import { limrunCli } from "./src/cli";
 import { CHANGED_CHANNEL, rpcContract } from "./src/contract";
 import { defaultKeyEnvironment, resolveApiKey } from "./src/key";
 import { LimrunFailure, createLimrunGateway } from "./src/limrun";
+import { readRunLog } from "./src/logs";
 import { MIGRATIONS, createRunStore } from "./src/runs";
 import { createService } from "./src/service";
 import { isRunLogPath, shimPaths, shimStatus } from "./src/shim";
@@ -30,7 +31,6 @@ export type { DeviceDto, RunDto, UsageDto } from "./src/contract";
 
 const SWEEP_EVERY_MS = 15 * 60_000;
 const KEEP_RUNS_MS = 14 * 24 * 60 * 60_000;
-const LOG_TAIL_BYTES = 64 * 1024;
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -45,20 +45,6 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
       { once: true },
     );
   });
-}
-
-async function readTail(path: string): Promise<{ text: string; truncated: boolean }> {
-  const handle = await open(path, "r");
-  try {
-    const { size } = await handle.stat();
-    const start = Math.max(0, size - LOG_TAIL_BYTES);
-    const buffer = Buffer.alloc(size - start);
-    await handle.read(buffer, 0, buffer.length, start);
-    const text = buffer.toString("utf8").replace(/\u001b\[[0-9;]*[A-Za-z]/g, "");
-    return { text: start > 0 ? text.slice(text.indexOf("\n") + 1) : text, truncated: start > 0 };
-  } finally {
-    await handle.close();
-  }
 }
 
 function refuse(cause: unknown): never {
@@ -144,11 +130,10 @@ export default async function plugin(bb: BbPluginApi) {
         return { ...state, starting, error: null };
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        return { devices: [], runs: service.runs(threadId), starting, error: message };
+        return { devices: [], starting, error: message };
       }
     },
     thread_runs: ({ threadId }) => ({ runs: service.runs(threadId) }),
-    thread_usage: ({ threadId }) => guarded(() => service.threadUsage(threadId)),
     start_device: ({ threadId, model }) => guarded(() => service.startDevice(threadId, model)),
     stop_device: ({ threadId, id }) =>
       guarded(async () => {
@@ -164,16 +149,9 @@ export default async function plugin(bb: BbPluginApi) {
     dismiss_runs: ({ threadId }) => ({ dismissed: service.dismissRuns(threadId) }),
     async run_log({ threadId, runId }) {
       const path = runs.logPath(threadId, runId);
-      if (path === null || !isRunLogPath(path, runId)) {
-        return { text: "No log was kept for this run.", truncated: false };
-      }
-      try {
-        return await readTail(path);
-      } catch {
-        return { text: "The log file is gone.", truncated: false };
-      }
+      return path === null ? { text: "No log was kept for this run.", truncated: false } : readRunLog(path, runId);
     },
-    org: () => service.orgOverview(),
+    org: async () => ({ ...(await service.orgOverview()), installId }),
   });
 
   bb.cli.register(limrunCli({ service, shimPaths: paths, installId }));

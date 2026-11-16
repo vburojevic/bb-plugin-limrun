@@ -1,4 +1,13 @@
 import type { DeviceDto, RunDto } from "../src/contract";
+import { LOST_AFTER_MS } from "../src/runs";
+
+/**
+ * A run's status as of `now`. The server works "lost" out when it answers,
+ * but an open card asks only on change signals, and a dead shim sends none.
+ */
+export function runStatus(run: RunDto, now: number): RunDto["status"] {
+  return run.status === "running" && now - run.lastActivityAt > LOST_AFTER_MS ? "lost" : run.status;
+}
 
 export function deviceName(device: DeviceDto): string {
   if (device.kind === "xcode") return "Xcode sandbox";
@@ -75,7 +84,7 @@ export function runVerb(run: RunDto): string {
 export function runTitle(run: RunDto, now: number): string {
   const verb = runVerb(run);
   const took = elapsed(run.startedAt, run.endedAt ?? now);
-  switch (run.status) {
+  switch (runStatus(run, now)) {
     case "running":
       return run.kind === "test" ? `Running tests on Limrun · ${took}` : `Building on Limrun · ${took}`;
     case "passed":

@@ -163,6 +163,30 @@ describe("lim shim", () => {
     expect(tap.bbCalls.at(-1)).toEqual(["limrun", "shim", "event", "--phase", "bind", "--instance", "ios_euna_02def"]);
   });
 
+  it("passes a crash signal's exit code through, like the real lim", () => {
+    writeFileSync(
+      join(fakeBin, "lim"),
+      `#!${process.execPath}\nprocess.kill(process.pid, "SIGKILL");\n`,
+    );
+    chmodSync(join(fakeBin, "lim"), 0o755);
+    expect(run(["ios", "list"]).status).toBe(137);
+  });
+
+  it("skips another bb's shim on PATH instead of looping", async () => {
+    const other = shimPaths(join(root, "other-data"));
+    await installShim(other, "bbi-other");
+    const result = spawnSync(paths.script, ["ios", "list"], {
+      env: {
+        PATH: `${paths.binDir}:${other.binDir}:${fakeBin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`,
+        HOME: home,
+      },
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(0);
+    expect(lines(join(root, "lim-calls"))).toEqual([["ios", "list"]]);
+  });
+
   it("fails clearly when the real lim is missing", () => {
     const result = spawnSync(paths.script, ["ios", "list"], {
       env: { PATH: `${paths.binDir}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: home },

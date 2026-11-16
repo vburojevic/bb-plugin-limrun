@@ -60,7 +60,6 @@ export const rpcContract = defineRpcContract({
     input: z.object({ threadId }).strict(),
     output: z.object({
       devices: z.array(deviceSchema),
-      runs: z.array(runSchema),
       starting: z.array(z.enum(["iphone", "ipad"])),
       error: z.string().nullable(),
     }),
@@ -68,10 +67,6 @@ export const rpcContract = defineRpcContract({
   thread_runs: {
     input: z.object({ threadId }).strict(),
     output: z.object({ runs: z.array(runSchema) }),
-  },
-  thread_usage: {
-    input: z.object({ threadId }).strict(),
-    output: z.object({ deviceMinutes: z.number(), billed: usageSchema.nullable() }),
   },
   start_device: {
     input: z.object({ threadId, model: z.enum(["iphone", "ipad"]) }).strict(),
@@ -87,7 +82,7 @@ export const rpcContract = defineRpcContract({
   },
   stream: {
     input: z.object({ threadId, id: instanceId }).strict(),
-    output: z.object({ url: z.string(), token: z.string(), streamOnly: z.boolean() }),
+    output: z.object({ url: z.string(), token: z.string() }),
   },
   dismiss_runs: {
     input: z.object({ threadId }).strict(),
@@ -104,6 +99,7 @@ export const rpcContract = defineRpcContract({
       month: usageSchema.nullable(),
       live: z.array(deviceSchema),
       error: z.string().nullable(),
+      installId: z.string(),
     }),
   },
 });

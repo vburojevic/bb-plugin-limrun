@@ -29,11 +29,10 @@ export interface Device {
   errorMessage: string | null;
 }
 
+/** One simulator's stream: its WebSocket URL and Limrun's stream-only token. */
 export interface StreamCredentials {
   url: string;
   token: string;
-  /** True when the token can only open the stream (Limrun's `streamToken`). */
-  streamOnly: boolean;
 }
 
 export interface UsageTotals {
@@ -73,7 +72,7 @@ export interface LimrunGateway {
   /** Merges labels into a live instance. Returns the updated device, or null when gone. */
   addLabels(kind: DeviceKind, id: string, labels: Record<string, string>): Promise<Device | null>;
   stream(id: string): Promise<StreamCredentials | null>;
-  usage(options: { from: string; to: string; labels?: string }): Promise<Usage>;
+  usage(options: { from: string; to: string }): Promise<Usage>;
 }
 
 export const LIVE_STATES = ["creating", "assigned", "ready"] as const;
@@ -262,16 +261,10 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
     async stream(id) {
       const found = await getRaw("ios", id);
       if (found === null) return null;
-      const status = found.data.status as {
-        state: string;
-        endpointWebSocketUrl?: string;
-        streamToken?: string;
-        token?: string;
-      };
-      if (status.state !== "ready" || !status.endpointWebSocketUrl) return null;
-      const token = status.streamToken ?? status.token;
-      if (!token) return null;
-      return { url: status.endpointWebSocketUrl, token, streamOnly: status.streamToken !== undefined };
+      const status = found.data.status as { state: string; endpointWebSocketUrl?: string; streamToken?: string };
+      // Only the stream-only token goes to a browser, never the full-control `token`.
+      if (status.state !== "ready" || !status.endpointWebSocketUrl || !status.streamToken) return null;
+      return { url: status.endpointWebSocketUrl, token: status.streamToken };
     },
 
     usage: (options) =>
@@ -280,7 +273,6 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
           from: options.from,
           to: options.to,
           bucket: "day",
-          ...(options.labels ? { labels: options.labels } : {}),
         });
         const summary = response.summary as unknown as {
           ios?: Record<string, Partial<UsageTotals>>;
