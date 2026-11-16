@@ -31,6 +31,11 @@ and runs at most 2 simulators and 1 Xcode sandbox at a time.
 `lim` does not reach Limrun through bb. If the person asks for Limrun, ask
 them to turn on the Limrun toggle in the composer; do not sign in yourself.
 
+If this machine's `lim` is already signed in and you use it anyway, add
+`--label bb-thread=$BB_THREAD_ID` to every `lim ios create` and
+`lim xcode create`. Only labeled devices show in the thread's Limrun tab and
+stop when the thread is archived; an unlabeled one keeps billing.
+
 ## Commands
 
 - `bb limrun status`: connection, whether this thread builds on Limrun, its devices.

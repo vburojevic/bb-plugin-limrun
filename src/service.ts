@@ -4,7 +4,7 @@
  */
 import { stopThreadDevices, sweep, type CleanupLog, type ThreadState } from "./cleanup";
 import type { ResolvedKey } from "./key";
-import { INSTALL_LABEL, THREAD_LABEL, isThreadId, ownedLabels, threadSelector } from "./labels";
+import { INSTALL_LABEL, isThreadId, ownedLabels, threadSelector } from "./labels";
 import {
   LIVE_STATES,
   LimrunFailure,

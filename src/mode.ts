@@ -24,6 +24,32 @@ export const MODE_MIGRATIONS = [
 /** A new-thread toggle left longer than this no longer applies. */
 export const PENDING_FOR_MS = 30 * 60_000;
 
+/** What the message.dispatch hook knows about one dispatch. */
+export interface DispatchFacts {
+  attempt: string;
+  initiator: string;
+  /** How the dispatch was requested; bb sets it for a new thread's first message, null for follow-ups. */
+  origin: unknown;
+  senderThreadId: string | null;
+  threadCreatedAt: number;
+  now: number;
+}
+
+/**
+ * Whether a dispatch is a person's first message in a new thread, the only
+ * one that may claim a project's new-thread flag. A follow-up in a recent
+ * thread (origin null) or a thread an agent started (a sender thread) never does.
+ */
+export function isNewThreadStart(facts: DispatchFacts): boolean {
+  return (
+    facts.attempt === "start-turn" &&
+    facts.initiator === "user" &&
+    facts.origin !== null &&
+    facts.senderThreadId === null &&
+    facts.now - facts.threadCreatedAt < PENDING_FOR_MS
+  );
+}
+
 export function createModeStore(db: Database.Database, now: () => number = Date.now) {
   return {
     isOn(threadId: string): boolean {

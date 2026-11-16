@@ -59,7 +59,7 @@ describe("runs", () => {
 
   it("walks a build from start to verdict and keeps runs per thread", () => {
     const { runs, now } = store();
-    runs.start({ id: "run_a", threadId: "thr_one", kind: "build", command: "lim xcode build .", logPath: null });
+    runs.start({ id: "run_a", threadId: "thr_one", kind: "build", command: "lim xcode build ." });
     expect(runs.forThread("thr_one")[0]?.status).toBe("running");
     runs.progress("thr_one", "run_a", "  Compiling   Foo.swift  ");
     expect(runs.get("thr_one", "run_a")?.lastLine).toBe("Compiling Foo.swift");
@@ -83,7 +83,7 @@ describe("runs", () => {
 
   it("keeps a long build running while it reports, and calls a quiet one lost", () => {
     const { runs, now } = store();
-    runs.start({ id: "run_a", threadId: "thr_one", kind: "build", command: "a", logPath: null });
+    runs.start({ id: "run_a", threadId: "thr_one", kind: "build", command: "a" });
     now.value += LOST_AFTER_MS - 1000;
     runs.progress("thr_one", "run_a", "Compiling");
     now.value += LOST_AFTER_MS - 1000;
@@ -91,15 +91,15 @@ describe("runs", () => {
     now.value += 2000;
     expect(runs.get("thr_one", "run_a")?.status).toBe("lost");
     // A lost run can be dismissed; a reporting one cannot.
-    runs.start({ id: "run_b", threadId: "thr_one", kind: "build", command: "b", logPath: null });
+    runs.start({ id: "run_b", threadId: "thr_one", kind: "build", command: "b" });
     expect(runs.dismissFinished("thr_one")).toBe(1);
     expect(runs.get("thr_one", "run_b")?.dismissed).toBe(false);
   });
 
   it("dismisses only finished runs", () => {
     const { runs } = store();
-    runs.start({ id: "run_a", threadId: "thr_one", kind: "build", command: "a", logPath: null });
-    runs.start({ id: "run_b", threadId: "thr_one", kind: "test", command: "b", logPath: null });
+    runs.start({ id: "run_a", threadId: "thr_one", kind: "build", command: "a" });
+    runs.start({ id: "run_b", threadId: "thr_one", kind: "test", command: "b" });
     runs.end("thr_one", "run_a", 1, null);
     expect(runs.dismissFinished("thr_one")).toBe(1);
     const byId = Object.fromEntries(runs.forThread("thr_one").map((run) => [run.id, run.dismissed]));

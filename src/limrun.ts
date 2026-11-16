@@ -81,8 +81,6 @@ export interface LimrunGateway {
   createIos(options: CreateIosOptions): Promise<Device>;
   /** Deletes; an instance that is already gone counts as deleted. */
   remove(kind: DeviceKind, id: string): Promise<void>;
-  /** Merges labels into a live instance. Returns the updated device, or null when gone. */
-  addLabels(kind: DeviceKind, id: string, labels: Record<string, string>): Promise<Device | null>;
   stream(id: string): Promise<StreamCredentials | null>;
   usage(options: { from: string; to: string }): Promise<Usage>;
   /**
@@ -120,7 +118,7 @@ export function describeFailure(cause: unknown): LimrunFailure {
     const status = cause.status;
     if (status === 401 || status === 403) {
       return new LimrunFailure(
-        "Limrun rejected the API key. Sign in again with `lim login`, or set LIM_API_KEY for the bb server.",
+        "Limrun rejected this API key. Check it at console.limrun.com under Settings, API Keys, and paste it again on bb's Limrun page.",
         "key-rejected",
       );
     }
@@ -263,37 +261,6 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
         if (cause instanceof APIError && cause.status === 404) return;
         throw describeFailure(cause);
       }
-    },
-
-    async addLabels(kind, id, labels) {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const found = await getRaw(kind, id);
-        if (found === null) return null;
-        const current = found.data as RawInstance;
-        const existing = current.metadata.labels ?? {};
-        const missing = Object.entries(labels).some(([key, value]) => existing[key] !== value);
-        if (!missing) return toDevice(kind, current);
-        if (!LIVE_STATES.includes(current.status.state as (typeof LIVE_STATES)[number])) {
-          return toDevice(kind, current);
-        }
-        const etag = found.response.headers.get("etag");
-        if (etag === null) throw new LimrunFailure("Limrun returned no ETag for a label change.", "failed");
-        try {
-          await resource(kind).update(id, {
-            ifMatch: etag,
-            metadata: { labels: { ...existing, ...labels } },
-          });
-          return toDevice(kind, {
-            ...current,
-            metadata: { ...current.metadata, labels: { ...existing, ...labels } },
-          });
-        } catch (cause) {
-          if (cause instanceof APIError && cause.status === 412 && attempt === 0) continue;
-          if (cause instanceof APIError && cause.status === 404) return null;
-          throw describeFailure(cause);
-        }
-      }
-      return null;
     },
 
     async stream(id) {

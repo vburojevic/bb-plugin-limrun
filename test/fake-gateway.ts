@@ -94,13 +94,6 @@ export function createFakeGateway(seed: Stored[] = []) {
         item.endedAt = new Date().toISOString();
       }
     },
-    async addLabels(kind, id, labels) {
-      calls.push(`label ${kind} ${id}`);
-      const item = store.get(id);
-      if (item === undefined) return null;
-      item.labels = { ...item.labels, ...labels };
-      return toDevice(item);
-    },
     async stream(id): Promise<StreamCredentials | null> {
       const item = store.get(id);
       if (item === undefined || item.state !== "ready") return null;

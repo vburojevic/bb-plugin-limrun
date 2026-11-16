@@ -1,8 +1,8 @@
 /**
  * The thread's Limrun tab: the simulator the thread owns, streamed with touch
  * and keyboard, plus start and stop. A thread's devices are the instances
- * labeled with its id, whoever started them: this panel, the agent through
- * the shim, or an agent that added the label itself.
+ * labeled with its id, whoever started them: this panel, or the agent of a
+ * thread that builds on Limrun (the server's proxy labels it).
  */
 import { useEffect, useMemo, useState } from "react";
 import { useBbNavigate } from "@get-bb/plugin-sdk/app";
@@ -278,8 +278,8 @@ function EmptyState({
         <div className="space-y-1">
           <p className="text-sm font-medium">No Limrun simulator in this thread</p>
           <p className="text-xs text-muted-foreground">
-            Start one here, or let the agent run <code>lim ios create</code>. It shows here either way and stops
-            when the thread is archived.
+            Start one here, or turn on Limrun in the composer and ask the agent to run the app. It stops when
+            the thread is archived.
           </p>
         </div>
         <div className="flex justify-center gap-2">

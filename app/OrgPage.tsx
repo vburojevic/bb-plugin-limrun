@@ -1,5 +1,5 @@
 /**
- * The Limrun page in bb's sidebar: is Limrun connected, is the shim on,
+ * The Limrun page in bb's sidebar: is Limrun connected,
  * what has the org spent, and which devices are running right now.
  */
 import { useState } from "react";
@@ -86,6 +86,7 @@ function Connection({
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -109,18 +110,47 @@ function Connection({
 
   if (overview.connected) {
     return (
+      <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
         <Icon name="CircleCheck" className="size-4" />
         <span className="min-w-0 flex-1">Connected, using {SOURCE[overview.keySource ?? ""] ?? "a Limrun key"}.</span>
         {overview.keySource === "bb" ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void rpc.call("clear_api_key").then(onChanged, (cause) => setError(errorText(cause)))}
-          >
-            Remove key
-          </Button>
+          confirming ? (
+            <>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+                Keep
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() =>
+                  void rpc.call("clear_api_key").then(
+                    () => {
+                      setConfirming(false);
+                      onChanged();
+                    },
+                    (cause) => {
+                      setConfirming(false);
+                      setError(errorText(cause));
+                    },
+                  )
+                }
+              >
+                Remove the key
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+              Remove key
+            </Button>
+          )
         ) : null}
+      </div>
+      {error !== null ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
       </div>
     );
   }
@@ -128,7 +158,11 @@ function Connection({
   return (
     <form onSubmit={save} className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        Paste a Limrun API key to connect. Create one at console.limrun.com under Settings, API Keys. It stays on the bb
+        Paste a Limrun API key to connect. Create one at{" "}
+        <a href="https://console.limrun.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          console.limrun.com
+        </a>{" "}
+        under Settings, API Keys. It stays on the bb
         server; agents and this page never see it again.
       </p>
       <div className="flex items-center gap-2">

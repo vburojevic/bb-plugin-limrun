@@ -70,7 +70,7 @@ export function createBuildFollower(deps: FollowerDeps) {
   /** Streams one running build to its end, writing the run as it goes. */
   async function stream(sandbox: Device, threadId: string, state: BuildState, signal: AbortSignal) {
     const limrun = await deps.gateway();
-    deps.runs.start({ id: state.execId, threadId, kind: kindOf(state.execId), command: `lim xcode ${kindOf(state.execId)}`, logPath: null });
+    deps.runs.start({ id: state.execId, threadId, kind: kindOf(state.execId), command: `lim xcode ${kindOf(state.execId)}`});
     deps.runs.setSandbox(threadId, state.execId, sandbox.id);
     deps.publish(threadId);
     let pending = "";
@@ -113,11 +113,18 @@ export function createBuildFollower(deps: FollowerDeps) {
           if (state.status === "RUNNING") {
             await stream(sandbox, threadId, state, signal);
           } else if (first) {
-            // Built before bb was watching: not this card's news.
+            // A build bb was streaming when it last stopped (a reload, a
+            // restart, the switch flipped) gets its verdict now; one built
+            // before bb ever watched is not this card's news.
+            if (deps.runs.get(threadId, state.execId)?.endedAt === null) {
+              deps.runs.end(threadId, state.execId, exitCodeOf(state), null);
+              await recordTimes(sandbox.id, threadId, state.execId);
+              deps.publish(threadId);
+            }
             handled.set(sandbox.id, state.execId);
           } else {
             // Finished between two polls (a fast build): record it whole.
-            deps.runs.start({ id: state.execId, threadId, kind: kindOf(state.execId), command: `lim xcode ${kindOf(state.execId)}`, logPath: null });
+            deps.runs.start({ id: state.execId, threadId, kind: kindOf(state.execId), command: `lim xcode ${kindOf(state.execId)}`});
             deps.runs.setSandbox(threadId, state.execId, sandbox.id);
             deps.runs.end(threadId, state.execId, exitCodeOf(state), null);
             await recordTimes(sandbox.id, threadId, state.execId);
@@ -155,10 +162,6 @@ export function createBuildFollower(deps: FollowerDeps) {
           if (watching.get(sandbox.id) === controller) watching.delete(sandbox.id);
         });
       }
-    },
-
-    watched(): string[] {
-      return [...watching.keys()];
     },
 
     stop(): void {

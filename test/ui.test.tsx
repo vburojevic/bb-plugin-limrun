@@ -58,7 +58,7 @@ describe("build card", () => {
     expect(view.container.textContent ?? "").not.toContain("THREAD-A-ONLY");
   });
 
-  it("stops claiming a build runs once its shim has gone quiet", async () => {
+  it("stops claiming a build runs once bb has stopped hearing from it", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const started = Date.now();
     const view = renderSlot({ component: RunsBanner }, {}, {

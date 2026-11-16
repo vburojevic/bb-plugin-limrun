@@ -25,7 +25,7 @@ import { limrunCli } from "./src/cli";
 import { CHANGED_CHANNEL, rpcContract } from "./src/contract";
 import { defaultKeyEnvironment, resolveApiKey } from "./src/key";
 import { LimrunFailure, createLimrunGateway, describeFailure } from "./src/limrun";
-import { MODE_MIGRATIONS, PENDING_FOR_MS, createModeStore } from "./src/mode";
+import { MODE_MIGRATIONS, createModeStore, isNewThreadStart } from "./src/mode";
 import { PROXY_ROUTE, handleProxy, signThreadToken, verifyThreadToken } from "./src/proxy";
 import { MIGRATIONS, createRunStore } from "./src/runs";
 import { createService } from "./src/service";
@@ -194,17 +194,17 @@ export default async function plugin(bb: BbPluginApi) {
 
   // A new thread whose composer had Build on Limrun on: its project carries a
   // short-lived flag, claimed by the first message a person sends there.
-  const hooks = (bb as { experimental_hooks?: BbPluginApi["experimental_hooks"] }).experimental_hooks;
-  hooks?.on("message.dispatch", (context) => {
+  bb.experimental_hooks.on("message.dispatch", (context) => {
     const thread = context.thread;
-    const fresh = Date.now() - thread.createdAt < PENDING_FOR_MS;
-    if (
-      context.attempt === "start-turn" &&
-      context.initiator === "user" &&
-      fresh &&
-      !modes.known(thread.id) &&
-      modes.claimPending(context.project.id)
-    ) {
+    const start = isNewThreadStart({
+      attempt: context.attempt,
+      initiator: context.initiator,
+      origin: context.origin,
+      senderThreadId: context.senderThreadId,
+      threadCreatedAt: thread.createdAt,
+      now: Date.now(),
+    });
+    if (start && !modes.known(thread.id) && modes.claimPending(context.project.id)) {
       modes.set(thread.id, true);
       log.info("build on limrun on for a new thread", { threadId: thread.id });
       publish(thread.id);

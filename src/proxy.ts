@@ -22,10 +22,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { INSTALL_LABEL, THREAD_LABEL, isThreadId } from "./labels";
+import { LIVE_STATES } from "./limrun";
 
 export const PROXY_ROUTE = "/lim";
 export const LIMRUN_API = "https://api.limrun.com";
-export const LIVE_STATE_FILTER = "creating,assigned,ready";
 
 export interface ProxyLog {
   info(message: string, data?: Record<string, unknown>): void;
@@ -73,12 +73,42 @@ const COLLECTION = /^\/v1\/(ios|xcode)_instances$/;
 const INSTANCE = /^\/v1\/(ios|xcode)_instances\/([A-Za-z0-9_]{1,120})(\/[A-Za-z0-9_\-/.]*)?$/;
 const ASSETS = /^\/v1\/assets(\/[A-Za-z0-9_\-/.]*)?$/;
 
+/**
+ * A Limrun path the proxy will look at: `/v1/…`, no `.` or `..` segment, no
+ * encoded dot, slash or backslash, and unchanged by URL normalization. Without
+ * this, `/v1/ios_instances/<mine>/../<theirs>` passes the ownership check on
+ * `<mine>` and fetch resolves it to someone else's device.
+ */
+export function isPlainPath(path: string): boolean {
+  if (!path.startsWith("/v1/") || /%2e|%2f|%5c|\\/i.test(path)) return false;
+  if (path.split("/").some((segment) => segment === "." || segment === "..")) return false;
+  try {
+    return new URL(path, "https://limrun.invalid").pathname === path;
+  } catch {
+    return false;
+  }
+}
+
+/** One create at a time per thread and kind, so racing creates can't pass the cap together. */
+const createQueues = new Map<string, Promise<unknown>>();
+function oneAtATime<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = createQueues.get(key) ?? Promise.resolve();
+  const next = previous.then(work, work);
+  const settled = next.catch(() => {});
+  createQueues.set(key, settled);
+  void settled.then(() => {
+    if (createQueues.get(key) === settled) createQueues.delete(key);
+  });
+  return next;
+}
+
 export async function handleProxy(request: Request, deps: ProxyDeps): Promise<Response> {
   const doFetch = deps.fetch ?? fetch;
   const upstream = deps.upstream ?? LIMRUN_API;
   const url = new URL(request.url);
   const path = url.searchParams.get("p") ?? "";
   url.searchParams.delete("p");
+  if (!isPlainPath(path)) return json(400, "bb's Limrun proxy only takes plain /v1/ paths.");
 
   const bearer = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const threadId = deps.verifyToken(bearer);
@@ -129,7 +159,7 @@ export async function handleProxy(request: Request, deps: ProxyDeps): Promise<Re
   };
 
   const liveIds = async (kind: Kind): Promise<Set<string>> => {
-    const query = new URLSearchParams({ labelSelector: `${THREAD_LABEL}=${threadId}`, state: LIVE_STATE_FILTER });
+    const query = new URLSearchParams({ labelSelector: `${THREAD_LABEL}=${threadId}`, state: LIVE_STATES.join(",") });
     const response = await send(`/v1/${kind}_instances`, query, { method: "GET", body: null });
     if (!response.ok) return new Set();
     const items = (await response.json()) as { metadata: { id: string } }[];
@@ -147,7 +177,7 @@ export async function handleProxy(request: Request, deps: ProxyDeps): Promise<Re
       );
       return relay(await send(path, url.searchParams, { method, body }));
     }
-    if (method === "POST") {
+    if (method === "POST") return oneAtATime(`${threadId}:${kind}`, async () => {
       let spec: { metadata?: { labels?: Record<string, string> } } & Record<string, unknown>;
       try {
         spec = body !== null && body.length > 0 ? JSON.parse(Buffer.from(body).toString("utf8")) : {};
@@ -178,7 +208,7 @@ export async function handleProxy(request: Request, deps: ProxyDeps): Promise<Re
       deps.log.info("proxy created device", { threadId, kind, id });
       deps.changed(threadId);
       return relay(response);
-    }
+    });
     return json(405, "bb's Limrun proxy does not allow that.");
   }
 

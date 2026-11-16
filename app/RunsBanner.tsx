@@ -1,7 +1,7 @@
 /**
  * Remote builds and tests above the thread's composer.
  *
- * Shows while a `lim xcode build` or `lim xcode test` the shim reported is
+ * Shows while a `lim xcode build` or `lim xcode test` the server is following is
  * running, and keeps the verdict until it is dismissed or 30 minutes pass.
  * It reads only the plugin's own run table, so it costs no Limrun calls.
  */
@@ -118,6 +118,9 @@ function RunRow({ threadId, run, now }: { threadId: string; run: RunDto; now: nu
         <code className="min-w-0 flex-1 truncate text-muted-foreground" title={run.command}>
           {run.command}
         </code>
+        <span className="shrink-0 tabular-nums text-muted-foreground">
+          {new Date(run.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
         <span className="shrink-0 tabular-nums text-muted-foreground">
           {elapsed(run.startedAt, run.endedAt ?? now)}
         </span>

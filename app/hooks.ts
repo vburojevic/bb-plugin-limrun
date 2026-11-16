@@ -29,8 +29,8 @@ export function useNow(active: boolean, everyMs = 1000): number {
 /**
  * One RPC read, refetched on the plugin's change signal for `threadId` (or
  * any thread when `threadId` is null) and, optionally, on a timer. Devices an
- * agent starts with plain `lim` and no shim send no signal, so the panel
- * also polls while it is open.
+ * agent starts through the proxy signal at once, but devices that end on their
+ * own (Limrun's idle timeout) send none, so the panel also polls while open.
  */
 export function useLimrunQuery<T>(
   load: () => Promise<T>,

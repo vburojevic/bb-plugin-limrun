@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 
 import { CAPS, agentEnv, agentInstructions, proxyServerPath } from "../src/agent";
-import { MODE_MIGRATIONS, PENDING_FOR_MS, createModeStore } from "../src/mode";
+import { MODE_MIGRATIONS, PENDING_FOR_MS, createModeStore, isNewThreadStart } from "../src/mode";
 import { handleProxy, signThreadToken, verifyThreadToken, type ProxyDeps } from "../src/proxy";
 
 const SECRET = "s".repeat(64);
@@ -156,6 +156,42 @@ describe("proxy", () => {
     expect(limrun.instances.get("ios_theirs")!.state).toBe("terminated");
   });
 
+  it("refuses dot segments, so a path can't climb out of the thread's own device", async () => {
+    const limrun = fakeLimrun([
+      { id: "ios_mine", labels: { "bb-thread": "thr_one" }, state: "ready" },
+      { id: "ios_other", labels: { "bb-thread": "thr_two" }, state: "ready" },
+    ]);
+    const { deps: d } = deps(limrun);
+    for (const [method, path] of [
+      ["DELETE", "/v1/ios_instances/ios_mine/../ios_other"],
+      ["GET", "/v1/assets/../../v1/api_keys"],
+      ["POST", "/v1/assets/../ios_instances"],
+      ["PATCH", "/v1/ios_instances/ios_mine/../ios_mine"],
+      ["GET", "/v1/ios_instances/ios_mine/%2e%2e/ios_other"],
+      ["GET", "/v1/ios_instances/ios_mine/./cache"],
+    ]) {
+      const response = await handleProxy(call("thr_one", method!, path!, { body: method === "GET" ? undefined : {} }), d);
+      expect(response.status, `${method} ${path}`).toBe(400);
+    }
+    expect(limrun.instances.get("ios_other")!.state).toBe("ready");
+    expect(limrun.requests.filter((request) => request.method !== "GET")).toEqual([]);
+  });
+
+  it("keeps the cap when creates race", async () => {
+    const limrun = fakeLimrun();
+    const slow = (async (input: string | URL, init?: RequestInit) => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return limrun.fetchImpl(input, init);
+    }) as typeof fetch;
+    const { deps: d } = deps(limrun, { fetch: slow });
+    const statuses = await Promise.all(
+      [1, 2, 3, 4].map(async () => (await handleProxy(call("thr_one", "POST", "/v1/ios_instances", { body: {} }), d)).status),
+    );
+    const live = [...limrun.instances.values()].filter((item) => item.state === "ready");
+    expect(live.length).toBe(CAPS.ios);
+    expect(statuses.filter((status) => status === 200).length).toBe(CAPS.ios);
+  });
+
   it("refuses the rest of the org", async () => {
     const limrun = fakeLimrun();
     const { deps: d } = deps(limrun);
@@ -215,6 +251,20 @@ describe("agent setup", () => {
     expect(env[1]!.value).toBe(token);
     expect(JSON.stringify(env)).not.toContain("lim_");
     expect(agentInstructions()).toMatch(/never run local `xcodebuild`/i);
+  });
+});
+
+describe("new-thread flag", () => {
+  const base = { attempt: "start-turn", initiator: "user", origin: { kind: "user" }, senderThreadId: null, threadCreatedAt: 0, now: 1_000 };
+  it("goes only to a person's first message in a new thread", () => {
+    expect(isNewThreadStart(base)).toBe(true);
+    // A follow-up in a recent thread: bb sets no origin.
+    expect(isNewThreadStart({ ...base, origin: null })).toBe(false);
+    // A thread an agent started.
+    expect(isNewThreadStart({ ...base, senderThreadId: "thr_parent" })).toBe(false);
+    expect(isNewThreadStart({ ...base, initiator: "agent" })).toBe(false);
+    expect(isNewThreadStart({ ...base, attempt: "join-turn" })).toBe(false);
+    expect(isNewThreadStart({ ...base, now: PENDING_FOR_MS + 1 })).toBe(false);
   });
 });
 

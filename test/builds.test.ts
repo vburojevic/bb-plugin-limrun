@@ -69,6 +69,33 @@ describe("build follower", () => {
     expect(done.endedAt! - done.startedAt).toBe(6_500);
   });
 
+  it("closes a build it was streaming when it stopped, once it is watching again", async () => {
+    const { runs, fake, follower } = setup();
+    fake.builds.set("xcode_sb", { state: { execId: "build-0", status: "SUCCEEDED", exitCode: 0 } });
+    await follower.refresh();
+    await wait(30);
+    fake.builds.set("xcode_sb", {
+      state: { execId: "build-5", status: "RUNNING", exitCode: null },
+      finish: new Promise(() => {}),
+    });
+    await wait(40);
+    expect(runs.get("thr_one", "build-5")?.status).toBe("running");
+    follower.stop();
+    fake.builds.set("xcode_sb", { state: { execId: "build-5", status: "SUCCEEDED", exitCode: 0 } });
+    const again = createBuildFollower({
+      gateway: async () => fake.gateway,
+      runs,
+      sandboxes: async () => [(await fake.gateway.get("xcode", "xcode_sb"))!],
+      publish: () => {},
+      log: { info() {}, warn() {} },
+      pollMs: 10,
+    });
+    await again.refresh();
+    await wait(40);
+    again.stop();
+    expect(runs.get("thr_one", "build-5")).toMatchObject({ status: "passed", exitCode: 0 });
+  });
+
   it("records a fast build that finished between two polls", async () => {
     const { runs, fake, follower } = setup();
     fake.builds.set("xcode_sb", { state: { execId: "build-0", status: "SUCCEEDED", exitCode: 0 } });
