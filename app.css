@@ -1,0 +1,7 @@
+/* Limrun's viewer styles (rc-* classes), shipped as a CSS file the package's
+   exports do not expose, so it is imported by path. */
+@import "./node_modules/@limrun/ui/dist/index.css";
+
+.limrun-stream video {
+  border-radius: 0.75rem;
+}
