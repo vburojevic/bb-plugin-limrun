@@ -81,6 +81,7 @@ Every command takes `--json`.
 ```sh
 npm install
 npm run check                                    # typecheck and unit tests
+npm run check:install                            # build the way bb's git install does (committed files only)
 LIMRUN_LIVE=1 npx vitest run test/live.test.ts   # one short real iPhone session
 bb plugin build
 ```

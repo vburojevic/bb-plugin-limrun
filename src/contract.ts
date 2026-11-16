@@ -109,5 +109,4 @@ export type DeviceDto = z.infer<typeof deviceSchema>;
 export type RunDto = z.infer<typeof runSchema>;
 export type UsageDto = z.infer<typeof usageSchema>;
 
-/** Realtime channel: payload `{ threadId: string | null }`. */
-export const CHANGED_CHANNEL = "limrun-changed";
+export { CHANGED_CHANNEL } from "./channel";

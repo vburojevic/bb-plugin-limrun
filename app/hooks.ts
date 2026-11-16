@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 
-import { CHANGED_CHANNEL, type RpcContract } from "../src/contract";
+import { CHANGED_CHANNEL } from "../src/channel";
+import type { RpcContract } from "../src/contract";
 
 export function useLimrunRpc() {
   return useRpc<RpcContract>();

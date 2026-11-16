@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-limrun",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Limrun cloud iOS simulators and Xcode builds, beside every bb thread.",
   "license": "MIT",
@@ -25,7 +25,8 @@
     "build": "bb plugin build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "tsc --noEmit && vitest run"
+    "check": "tsc --noEmit && vitest run",
+    "check:install": "node scripts/check-install.mjs"
   },
   "dependencies": {
     "@limrun/api": "0.73.2",
