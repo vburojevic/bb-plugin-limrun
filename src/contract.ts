@@ -51,10 +51,33 @@ export const rpcContract = defineRpcContract({
     input: z.null(),
     output: z.object({
       connected: z.boolean(),
-      keySource: z.enum(["env", "lim-config"]).nullable(),
+      keySource: z.enum(["bb", "env", "lim-config"]).nullable(),
       error: z.string().nullable(),
-      shim: z.object({ installed: z.boolean(), current: z.boolean(), pathLine: z.string() }),
     }),
+  },
+  set_api_key: {
+    input: z.object({ key: z.string().trim().min(8).max(400) }).strict(),
+    output: z.object({ connected: z.boolean(), error: z.string().nullable() }),
+  },
+  clear_api_key: {
+    input: z.null(),
+    output: z.object({ cleared: z.boolean() }),
+  },
+  thread_mode: {
+    input: z.object({ threadId }).strict(),
+    output: z.object({ on: z.boolean() }),
+  },
+  set_thread_mode: {
+    input: z.object({ threadId, on: z.boolean() }).strict(),
+    output: z.object({ on: z.boolean() }),
+  },
+  pending_mode: {
+    input: z.object({ projectId: z.string().min(1).max(120) }).strict(),
+    output: z.object({ on: z.boolean() }),
+  },
+  set_pending_mode: {
+    input: z.object({ projectId: z.string().min(1).max(120), on: z.boolean() }).strict(),
+    output: z.object({ on: z.boolean() }),
   },
   thread_state: {
     input: z.object({ threadId }).strict(),
@@ -89,7 +112,7 @@ export const rpcContract = defineRpcContract({
     output: z.object({ dismissed: z.number() }),
   },
   run_log: {
-    input: z.object({ threadId, runId: z.string().regex(/^run_[a-z0-9]{1,40}$/) }).strict(),
+    input: z.object({ threadId, runId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/) }).strict(),
     output: z.object({ text: z.string(), truncated: z.boolean() }),
   },
   org: {

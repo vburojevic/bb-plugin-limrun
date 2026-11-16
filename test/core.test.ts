@@ -7,7 +7,6 @@ import { threadOf } from "../src/labels";
 import { MIGRATIONS, createRunStore, statusOf, LOST_AFTER_MS } from "../src/runs";
 import { limrunCli } from "../src/cli";
 import { createService } from "../src/service";
-import { shimPaths } from "../src/shim";
 import { createFakeGateway, stored } from "./fake-gateway";
 
 const quiet = { info() {}, warn() {} };
@@ -19,6 +18,16 @@ describe("API key", () => {
     expect(parseLimConfig('api-key: "lim_d"')).toBe("lim_d");
     expect(parseLimConfig("api-key:\n")).toBeNull();
     expect(parseLimConfig("nothing here")).toBeNull();
+  });
+
+  it("prefers the key saved in bb over the server's environment and lim's config", async () => {
+    const config = async () => "api-key: lim_config\n";
+    expect(
+      await resolveApiKey({ fromSettings: async () => "lim_bb", env: { LIM_API_KEY: "lim_env" }, readConfig: config }),
+    ).toEqual({ key: "lim_bb", source: "bb" });
+    expect(
+      await resolveApiKey({ fromSettings: async () => null, env: { LIM_API_KEY: "lim_env" }, readConfig: config }),
+    ).toEqual({ key: "lim_env", source: "env" });
   });
 
   it("prefers LIM_API_KEY, then lim's config, then nothing", async () => {
@@ -182,19 +191,6 @@ describe("service", () => {
     await expect(svc.stopDevice("thr_one", "ios_other")).rejects.toThrow(/does not belong/);
   });
 
-  it("binds devices lim created implicitly, but never takes another thread's", async () => {
-    const { svc, store } = service(
-      createFakeGateway([
-        stored({ id: "sandbox_new", labels: {} }),
-        stored({ id: "ios_taken", labels: { "bb-thread": "thr_two" } }),
-      ]),
-    );
-    const bound = await svc.bind("thr_one", ["sandbox_new", "ios_taken", "bogus_id"]);
-    expect(bound.map((device) => device.id)).toEqual(["sandbox_new"]);
-    expect(store.get("sandbox_new")?.labels["bb-thread"]).toBe("thr_one");
-    expect(store.get("ios_taken")?.labels["bb-thread"]).toBe("thr_two");
-  });
-
   it("stops by id only devices this install labeled", async () => {
     const { svc, store } = service(
       createFakeGateway([
@@ -212,7 +208,7 @@ describe("service", () => {
     const { svc, store } = service(
       createFakeGateway([stored({ id: "ios_victim", labels: { "bb-thread": "thr_victim", "bb-install": "me" } })]),
     );
-    const cli = limrunCli({ service: svc, shimPaths: shimPaths("/tmp/unused"), installId: "me" });
+    const cli = limrunCli({ service: svc, isOn: () => true });
     const signal = new AbortController().signal;
     const outside = await cli.run(["stop", "ios_victim"], { signal });
     expect(outside.exitCode).not.toBe(0);

@@ -15,7 +15,7 @@ import {
   type StreamCredentials,
   type Usage,
 } from "./limrun";
-import type { Run, RunKind, RunStore } from "./runs";
+import type { Run, RunStore } from "./runs";
 
 export interface Connection {
   connected: boolean;
@@ -184,49 +184,26 @@ export function createService(deps: ServiceDeps) {
       return credentials;
     },
 
-    /** Labels devices lim created for a thread without being told to. */
-    async bind(threadId: string, ids: string[]): Promise<Device[]> {
-      const limrun = await gateway();
-      const bound: Device[] = [];
-      for (const id of [...new Set(ids)].slice(0, 10)) {
-        const kind = kindOfId(id);
-        if (kind === null) continue;
-        const device = await limrun.get(kind, id);
-        // Never take over a device another thread already owns.
-        if (device === null || (device.threadId !== null && device.threadId !== threadId)) continue;
-        const labeled = await limrun.addLabels(kind, id, {
-          [THREAD_LABEL]: threadId,
-          [INSTALL_LABEL]: deps.installId,
-        });
-        if (labeled !== null) bound.push(labeled);
-      }
-      if (bound.length > 0) changed(threadId);
-      return bound;
-    },
-
-    runStarted(threadId: string, input: { id: string; kind: RunKind; command: string; logPath: string | null }): Run {
-      const run = deps.runs.start({ ...input, threadId });
-      changed(threadId);
-      return run;
-    },
-
-    runProgress(threadId: string, id: string, line: string): Run | null {
-      const run = deps.runs.progress(threadId, id, line);
-      deps.publish(threadId);
-      return run;
-    },
-
-    runEnded(threadId: string, id: string, exitCode: number, line: string | null): Run | null {
-      const run = deps.runs.end(threadId, id, exitCode, line);
-      changed(threadId);
-      return run;
-    },
-
     dismissRuns(threadId: string): number {
       const count = deps.runs.dismissFinished(threadId);
       deps.publish(threadId);
       return count;
     },
+
+    /** Live Xcode sandboxes this install labeled, for the build follower. */
+    async liveSandboxes(threadIds: Set<string>): Promise<Device[]> {
+      if (threadIds.size === 0) return [];
+      const sandboxes = await (await gateway()).list("xcode", {
+        labelSelector: `${INSTALL_LABEL}=${deps.installId}`,
+        live: true,
+        max: 200,
+      });
+      return sandboxes.filter((sandbox) => sandbox.threadId !== null && threadIds.has(sandbox.threadId));
+    },
+
+    gateway,
+
+    changed,
 
     async orgOverview(): Promise<OrgOverview> {
       try {

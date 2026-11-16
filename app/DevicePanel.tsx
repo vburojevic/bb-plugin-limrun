@@ -5,6 +5,7 @@
  * the shim, or an agent that added the label itself.
  */
 import { useEffect, useMemo, useState } from "react";
+import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { RemoteControl, type RemoteControlConnectionState } from "@limrun/ui/lite";
 
 import { Button } from "@/components/ui/button";
@@ -301,14 +302,19 @@ function EmptyState({
 }
 
 function NotConnected({ message }: { message: string | null }) {
+  const navigate = useBbNavigate();
   return (
     <Centered>
-      <div className="max-w-sm space-y-2 text-center">
-        <p className="text-sm font-medium">Limrun is not connected</p>
-        <p className="text-xs text-muted-foreground">
-          {message ?? "Sign in with the lim CLI on the Mac running bb."}
-        </p>
-        <pre className="rounded-md bg-muted px-3 py-2 text-left text-xs">npm install --global lim{"\n"}lim login</pre>
+      <div className="max-w-sm space-y-3 text-center">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Limrun is not connected</p>
+          <p className="text-xs text-muted-foreground">
+            {message ?? "Paste a Limrun API key on the Limrun page to connect."}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => navigate.toPluginPanel("limrun")}>
+          Open the Limrun page
+        </Button>
       </div>
     </Centered>
   );

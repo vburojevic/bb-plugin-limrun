@@ -62,6 +62,8 @@ export const MIGRATIONS = [
    )`,
   `CREATE INDEX runs_thread ON runs (thread_id, started_at DESC)`,
   `ALTER TABLE runs ADD COLUMN last_activity_at INTEGER`,
+  // v0.2: builds are followed from the server; the sandbox they ran on.
+  `ALTER TABLE runs ADD COLUMN sandbox_id TEXT`,
 ];
 
 export function lastActivity(row: Pick<Row, "started_at" | "last_activity_at">): number {
@@ -130,6 +132,17 @@ export function createRunStore(db: Database.Database, now: () => number = Date.n
     get(threadId: string, id: string): Run | null {
       const row = db.prepare(`SELECT * FROM runs WHERE id = ? AND thread_id = ?`).get(id, threadId) as Row | undefined;
       return row === undefined ? null : toRun(row);
+    },
+
+    setSandbox(threadId: string, id: string, sandboxId: string): void {
+      db.prepare(`UPDATE runs SET sandbox_id = ? WHERE id = ? AND thread_id = ?`).run(sandboxId, id, threadId);
+    },
+
+    sandboxOf(threadId: string, id: string): string | null {
+      const row = db.prepare(`SELECT sandbox_id FROM runs WHERE id = ? AND thread_id = ?`).get(id, threadId) as
+        | { sandbox_id: string | null }
+        | undefined;
+      return row?.sandbox_id ?? null;
     },
 
     logPath(threadId: string, id: string): string | null {

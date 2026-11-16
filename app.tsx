@@ -1,7 +1,8 @@
 /**
  * Limrun for bb: frontend entry.
  *
- * Three surfaces, each tied to one question:
+ * Four surfaces, each tied to one question:
+ * - a Limrun toggle in the composer: should this thread build on Limrun?
  * - "Limrun" in a thread's side panel: what is this thread's cloud simulator
  *   doing? Streamed with touch and keyboard, with start and stop.
  * - a card above the thread's composer, only while a remote build or test
@@ -14,6 +15,7 @@ import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import "./app.css";
 
 import { DevicePanel } from "./app/DevicePanel";
+import { ModeToggle } from "./app/ModeToggle";
 import { OrgPage } from "./app/OrgPage";
 import { RunsBanner } from "./app/RunsBanner";
 
@@ -27,6 +29,12 @@ export default definePluginApp((app) => {
     icon: "Cloud",
     layout: "flush",
     component: DevicePanel,
+  });
+
+  app.composer.customize({
+    id: "limrun-mode",
+    scopes: ["thread", "new-thread"],
+    actions: [{ id: "build-on-limrun", component: ModeToggle }],
   });
 
   app.composer.customize({

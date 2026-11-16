@@ -1,17 +1,18 @@
 /**
- * The Limrun API key, shared with the `lim` CLI.
+ * The Limrun API key, held by the bb server only.
  *
- * One sign-in per machine serves agents and this plugin: `LIM_API_KEY` in the
- * bb server's environment wins, then the key `lim login` or `lim set-api-key`
- * stored in `~/.lim/config.yaml` (a single `api-key: <value>` line, checked
- * against lim 0.57.3). The key never leaves the server: the browser only ever
- * receives one instance's stream URL and token.
+ * In order: the key pasted on bb's Limrun page (a bb secret setting), then
+ * `LIM_API_KEY` in the bb server's environment, then the key `lim login` or
+ * `lim set-api-key` stored in `~/.lim/config.yaml` on the server's machine (a
+ * single `api-key: <value>` line, checked against lim 0.57.3). Agents never
+ * get it: their lim reaches Limrun through the server's proxy, and the browser
+ * only gets one simulator's stream URL and stream-only token.
  */
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type KeySource = "env" | "lim-config";
+export type KeySource = "bb" | "env" | "lim-config";
 
 export interface ResolvedKey {
   key: string;
@@ -19,14 +20,17 @@ export interface ResolvedKey {
 }
 
 export interface KeyEnvironment {
+  /** The key pasted on bb's Limrun page, if any. */
+  fromSettings?: () => Promise<string | null>;
   env: Record<string, string | undefined>;
   readConfig: () => Promise<string | null>;
 }
 
 export const LIM_CONFIG_PATH = join(homedir(), ".lim", "config.yaml");
 
-export function defaultKeyEnvironment(): KeyEnvironment {
+export function defaultKeyEnvironment(fromSettings?: () => Promise<string | null>): KeyEnvironment {
   return {
+    ...(fromSettings ? { fromSettings } : {}),
     env: process.env,
     readConfig: async () => {
       try {
@@ -54,6 +58,8 @@ export function parseLimConfig(text: string): string | null {
 }
 
 export async function resolveApiKey(environment: KeyEnvironment): Promise<ResolvedKey | null> {
+  const fromSettings = (await environment.fromSettings?.())?.trim();
+  if (fromSettings) return { key: fromSettings, source: "bb" };
   const fromEnv = environment.env.LIM_API_KEY?.trim();
   if (fromEnv) return { key: fromEnv, source: "env" };
   const config = await environment.readConfig();
