@@ -3,10 +3,10 @@
  *
  * Two labels, both plain `key=value` strings on the instance:
  *
- * - `bb-thread` names the thread that owns the device. The shim adds it to
- *   every `lim … create`, the plugin adds it to devices it starts, and an agent
- *   without the shim adds it by hand (the skill says how). Archiving or
- *   deleting that thread deletes every live instance carrying it.
+ * - `bb-thread` names the thread that owns the device. The server's proxy adds
+ *   it to every device a Build on Limrun thread creates, and the plugin adds it
+ *   to devices started from the Limrun tab. Archiving or deleting that thread
+ *   deletes every live instance carrying it.
  * - `bb-install` names the bb installation that labeled it. Only the startup
  *   and periodic sweep needs it: a sweep deletes devices whose thread this bb
  *   no longer knows, and must never touch devices another bb (another Mac,

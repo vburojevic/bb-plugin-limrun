@@ -44,8 +44,6 @@ describe.runIf(live)("real Limrun", () => {
     expect(stream).not.toBeNull();
     console.log("stream", { url: stream!.url.replace(/\?.*/, "") });
 
-    const relabeled = await gateway.addLabels("ios", device.id, { "bb-check": "patched" });
-    expect(relabeled?.threadId).toBe(thread);
     const reread = await gateway.get("ios", device.id);
     expect(reread?.threadId).toBe(thread);
 

@@ -1,6 +1,6 @@
 /**
- * `bb limrun`: status, the thread's devices, stopping one, the shim, and the
- * hidden `shim event` door the shim reports through.
+ * `bb limrun`: status, the thread's devices and builds, and stopping one of
+ * its devices.
  */
 import { PluginCliError, cliCommand, defineCli } from "@get-bb/plugin-sdk";
 
@@ -8,12 +8,11 @@ import { isThreadId } from "./labels";
 import type { Device } from "./limrun";
 import type { Run } from "./runs";
 import type { LimrunService } from "./service";
-import { installShim, isRunLogPath, shimStatus, uninstallShim, type ShimPaths } from "./shim";
 
 export interface CliDeps {
   service: LimrunService;
-  shimPaths: ShimPaths;
-  installId: string;
+  /** Whether a thread builds on Limrun. */
+  isOn(threadId: string): boolean;
 }
 
 function minutesSince(iso: string, end: string | null): string {
@@ -58,34 +57,38 @@ async function asCliError<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-export function limrunCli({ service, shimPaths, installId }: CliDeps) {
+export function limrunCli({ service, isOn }: CliDeps) {
   const json = { type: "boolean", description: "Print JSON" } as const;
 
   return defineCli({
     name: "limrun",
-    summary: "Limrun cloud devices bound to bb threads: status, devices, stop, and the lim shim",
+    summary: "Limrun cloud devices bound to bb threads: status, devices, builds and stop",
     commands: {
       status: cliCommand({
-        summary: "Show the Limrun connection, the shim, and this thread's devices",
+        summary: "Show the Limrun connection, whether this thread builds on Limrun, and its devices",
         options: { json },
         async run(input, ctx) {
           const connection = await service.connection();
-          const shim = await shimStatus(shimPaths);
+          const on = isThreadId(ctx.threadId) ? isOn(ctx.threadId) : null;
           const devices =
             connection.connected && isThreadId(ctx.threadId)
               ? (await service.threadState(ctx.threadId)).devices
               : [];
           if (input.options.json) {
-            return { exitCode: 0, stdout: JSON.stringify({ connection, shim, devices }) };
+            return { exitCode: 0, stdout: JSON.stringify({ connection, buildOnLimrun: on, devices }) };
           }
           const lines = [
             connection.connected
-              ? `Limrun: connected (key from ${connection.keySource === "env" ? "LIM_API_KEY" : "~/.lim/config.yaml"})`
+              ? "Limrun: connected"
               : `Limrun: not connected. ${connection.error ?? ""}`.trim(),
-            shim.installed
-              ? `Shim: installed at ${shim.script}${shim.current ? "" : " (outdated: run bb limrun shim install)"}`
-              : "Shim: not installed (bb limrun shim install)",
           ];
+          if (on !== null) {
+            lines.push(
+              on
+                ? "Build on Limrun: on for this thread (lim is already set up here)"
+                : "Build on Limrun: off for this thread (turn it on in the composer)",
+            );
+          }
           if (isThreadId(ctx.threadId)) {
             lines.push(devices.length === 0 ? "This thread has no Limrun devices." : "This thread's devices:");
             lines.push(...devices.map((device) => `  ${deviceLine(device)}`));
@@ -109,7 +112,7 @@ export function limrunCli({ service, shimPaths, installId }: CliDeps) {
       }),
 
       runs: cliCommand({
-        summary: "List this thread's remote builds and tests the shim reported",
+        summary: "List this thread's remote builds and tests on Limrun",
         options: { json },
         async run(input, ctx) {
           const threadId = requireThread(ctx.threadId);
@@ -133,91 +136,6 @@ export function limrunCli({ service, shimPaths, installId }: CliDeps) {
             exitCode: 0,
             stdout: input.options.json ? JSON.stringify({ stopped: true, id }) : `Stopped ${id}.`,
           };
-        },
-      }),
-
-      "shim install": cliCommand({
-        summary: "Put the lim shim in place so devices and builds reach their thread",
-        options: { json },
-        async run(input) {
-          const status = await installShim(shimPaths, installId);
-          if (input.options.json) return { exitCode: 0, stdout: JSON.stringify(status) };
-          return {
-            exitCode: 0,
-            stdout: [
-              `Installed the lim shim at ${status.script}.`,
-              "Add this line to your shell profile (~/.zshrc), ahead of anything else that puts lim on PATH:",
-              `  ${status.pathLine}`,
-              "Outside bb threads, or with BB_LIMRUN_SHIM=off, it runs the real lim unchanged.",
-            ].join("\n"),
-          };
-        },
-      }),
-
-      "shim uninstall": cliCommand({
-        summary: "Remove the lim shim",
-        options: { json },
-        async run(input) {
-          const status = await uninstallShim(shimPaths);
-          if (input.options.json) return { exitCode: 0, stdout: JSON.stringify(status) };
-          return {
-            exitCode: 0,
-            stdout: `Removed the lim shim. Also remove ${status.binDir} from PATH in your shell profile.`,
-          };
-        },
-      }),
-
-      "shim status": cliCommand({
-        summary: "Say whether the lim shim is installed",
-        options: { json },
-        async run(input) {
-          const status = await shimStatus(shimPaths);
-          if (input.options.json) return { exitCode: 0, stdout: JSON.stringify(status) };
-          return {
-            exitCode: 0,
-            stdout: status.installed
-              ? `Installed at ${status.script}. PATH line: ${status.pathLine}`
-              : "Not installed. Run: bb limrun shim install",
-          };
-        },
-      }),
-
-      "shim event": cliCommand({
-        summary: "Used by the lim shim to report devices and remote builds",
-        hidden: true,
-        options: {
-          phase: { type: "enum", values: ["start", "progress", "end", "bind"], required: true, description: "Event" },
-          run: { type: "string", description: "Run id (run_…)" },
-          kind: { type: "enum", values: ["build", "test"], description: "Run kind" },
-          command: { type: "string", description: "The lim command line" },
-          log: { type: "string", description: "Log file path" },
-          line: { type: "string", description: "Last log line" },
-          exit: { type: "integer", min: -1, max: 255, description: "Exit code" },
-          instance: { type: "string", repeatable: true, description: "Instance id lim created" },
-        },
-        async run(input, ctx) {
-          const threadId = requireThread(ctx.threadId);
-          const { phase, run, kind, command, log, line, exit, instance } = input.options;
-          const runId = run !== undefined && /^run_[a-z0-9]{1,40}$/.test(run) ? run : null;
-          if (phase !== "bind" && runId === null) {
-            throw new PluginCliError("--run must be a run_… id", { code: "bad_run" });
-          }
-          // Only a path of the shim's own log shape is ever read back.
-          const logPath = log !== undefined && runId !== null && isRunLogPath(log, runId) ? log : null;
-          if (phase === "start") {
-            service.runStarted(threadId, {
-              id: runId!,
-              kind: kind ?? "build",
-              command: command ?? "lim xcode build",
-              logPath,
-            });
-          } else if (phase === "progress") {
-            if (line !== undefined) service.runProgress(threadId, runId!, line);
-          } else if (phase === "end") {
-            service.runEnded(threadId, runId!, exit ?? 1, line ?? null);
-          }
-          if (instance.length > 0) await asCliError(() => service.bind(threadId, instance));
-          return { exitCode: 0, stdout: "ok" };
         },
       }),
     },

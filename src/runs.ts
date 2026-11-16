@@ -1,10 +1,8 @@
 /**
- * Remote build and test runs, as the shim reports them.
- *
- * Limrun cannot push build events to a bb on a laptop (its webhooks need a
- * public HTTPS host), so the shim in front of `lim` reports each
- * `lim xcode build` and `lim xcode test` itself: start, a throttled last log
- * line, and the exit code. This table is the plugin's whole memory of them.
+ * Remote build and test runs of threads that build on Limrun, as the server's
+ * build follower (src/builds.ts) records them: start, a throttled last log
+ * line, and Limrun's verdict. This table is the plugin's whole memory of them;
+ * the log itself stays with Limrun.
  */
 import type Database from "better-sqlite3";
 
@@ -21,7 +19,7 @@ export interface Run {
   exitCode: number | null;
   status: RunStatus;
   lastLine: string | null;
-  /** The last start, progress or end report; a running build goes quiet only when its shim died. */
+  /** The last start, progress or end report; a running build goes quiet only when bb stopped following it. */
   lastActivityAt: number;
   dismissed: boolean;
 }
@@ -41,9 +39,10 @@ interface Row {
 }
 
 /**
- * A running build reports its last log line every two seconds while output
- * flows. Twenty quiet minutes means its shim was killed or crashed (found on a
- * sandboxed agent thread), so the card stops claiming it is building.
+ * A followed build gets a new last line every two seconds while output flows.
+ * Twenty quiet minutes means bb stopped following it (the follower closes it
+ * on its next start when Limrun still knows the verdict), so the card stops
+ * claiming it is building.
  */
 export const LOST_AFTER_MS = 20 * 60 * 1000;
 
@@ -62,6 +61,8 @@ export const MIGRATIONS = [
    )`,
   `CREATE INDEX runs_thread ON runs (thread_id, started_at DESC)`,
   `ALTER TABLE runs ADD COLUMN last_activity_at INTEGER`,
+  // v0.2: builds are followed from the server; the sandbox they ran on.
+  `ALTER TABLE runs ADD COLUMN sandbox_id TEXT`,
 ];
 
 export function lastActivity(row: Pick<Row, "started_at" | "last_activity_at">): number {
@@ -103,12 +104,12 @@ export function createRunStore(db: Database.Database, now: () => number = Date.n
   });
 
   return {
-    start(input: { id: string; threadId: string; kind: RunKind; command: string; logPath: string | null }): Run {
+    start(input: { id: string; threadId: string; kind: RunKind; command: string }): Run {
       db.prepare(
-        `INSERT INTO runs (id, thread_id, kind, command, started_at, log_path)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO runs (id, thread_id, kind, command, started_at)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
-      ).run(input.id, input.threadId, input.kind, clip(input.command, MAX_COMMAND), now(), input.logPath);
+      ).run(input.id, input.threadId, input.kind, clip(input.command, MAX_COMMAND), now());
       return this.get(input.threadId, input.id)!;
     },
 
@@ -132,11 +133,25 @@ export function createRunStore(db: Database.Database, now: () => number = Date.n
       return row === undefined ? null : toRun(row);
     },
 
-    logPath(threadId: string, id: string): string | null {
-      const row = db.prepare(`SELECT log_path FROM runs WHERE id = ? AND thread_id = ?`).get(id, threadId) as
-        | { log_path: string | null }
+    /** Limrun's own start and end times, which beat the moment bb noticed the build. */
+    setTimes(threadId: string, id: string, startedAt: number, endedAt: number): void {
+      db.prepare(`UPDATE runs SET started_at = ?, ended_at = ? WHERE id = ? AND thread_id = ? AND ended_at IS NOT NULL`).run(
+        startedAt,
+        endedAt,
+        id,
+        threadId,
+      );
+    },
+
+    setSandbox(threadId: string, id: string, sandboxId: string): void {
+      db.prepare(`UPDATE runs SET sandbox_id = ? WHERE id = ? AND thread_id = ?`).run(sandboxId, id, threadId);
+    },
+
+    sandboxOf(threadId: string, id: string): string | null {
+      const row = db.prepare(`SELECT sandbox_id FROM runs WHERE id = ? AND thread_id = ?`).get(id, threadId) as
+        | { sandbox_id: string | null }
         | undefined;
-      return row?.log_path ?? null;
+      return row?.sandbox_id ?? null;
     },
 
     forThread(threadId: string, limit = 20): Run[] {
@@ -157,14 +172,9 @@ export function createRunStore(db: Database.Database, now: () => number = Date.n
         .run(threadId, now() - LOST_AFTER_MS).changes;
     },
 
-    /** Runs older than the cutoff, removed from the table, with their log paths. */
-    prune(olderThan: number): { id: string; logPath: string }[] {
-      const rows = db.prepare(`SELECT id, log_path FROM runs WHERE started_at < ?`).all(olderThan) as {
-        id: string;
-        log_path: string | null;
-      }[];
-      db.prepare(`DELETE FROM runs WHERE started_at < ?`).run(olderThan);
-      return rows.flatMap((row) => (row.log_path === null ? [] : [{ id: row.id, logPath: row.log_path }]));
+    /** Forgets runs older than the cutoff. */
+    prune(olderThan: number): number {
+      return db.prepare(`DELETE FROM runs WHERE started_at < ?`).run(olderThan).changes;
     },
   };
 }

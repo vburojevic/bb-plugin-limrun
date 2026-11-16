@@ -1,4 +1,13 @@
-import type { CreateIosOptions, Device, DeviceKind, LimrunGateway, StreamCredentials, Usage } from "../src/limrun";
+import type {
+  BuildEvent,
+  BuildState,
+  CreateIosOptions,
+  Device,
+  DeviceKind,
+  LimrunGateway,
+  StreamCredentials,
+  Usage,
+} from "../src/limrun";
 import { MODEL_LABEL, LIVE_STATES } from "../src/limrun";
 import { installOf, threadOf } from "../src/labels";
 
@@ -13,8 +22,17 @@ interface Stored {
 }
 
 /** An in-memory Limrun with the label semantics the plugin relies on. */
+export interface FakeBuild {
+  state: BuildState;
+  events?: BuildEvent[];
+  /** Resolves a followed RUNNING build; set by the test. */
+  finish?: Promise<BuildState>;
+}
+
 export function createFakeGateway(seed: Stored[] = []) {
   const store = new Map<string, Stored>(seed.map((item) => [item.id, { ...item }]));
+  /** Sandbox id → its latest build, as the test scripts it. */
+  const builds = new Map<string, FakeBuild>();
   const calls: string[] = [];
   let counter = 0;
 
@@ -76,17 +94,25 @@ export function createFakeGateway(seed: Stored[] = []) {
         item.endedAt = new Date().toISOString();
       }
     },
-    async addLabels(kind, id, labels) {
-      calls.push(`label ${kind} ${id}`);
-      const item = store.get(id);
-      if (item === undefined) return null;
-      item.labels = { ...item.labels, ...labels };
-      return toDevice(item);
-    },
     async stream(id): Promise<StreamCredentials | null> {
       const item = store.get(id);
       if (item === undefined || item.state !== "ready") return null;
       return { url: `wss://fake/${id}`, token: "stream-token" };
+    },
+    async latestBuild(sandboxId, options) {
+      const build = builds.get(sandboxId);
+      if (build === undefined) return null;
+      if (options.execId !== undefined && options.execId !== build.state.execId) return null;
+      for (const event of build.events ?? []) options.onEvent?.(event);
+      if (options.follow && build.state.status === "RUNNING" && build.finish !== undefined) return build.finish;
+      return build.state;
+    },
+    async buildLog(sandboxId, execId) {
+      const build = builds.get(sandboxId);
+      return build?.state.execId === execId ? (build.events ?? []).map((event) => event.data).join("") : null;
+    },
+    async buildTimes() {
+      return { startedAt: 1_000, endedAt: 7_500 };
     },
     async usage(options): Promise<Usage> {
       const zero = { billedMinutes: 0, runtimeMinutes: 0, cost: 0, count: 0 };
@@ -94,12 +120,12 @@ export function createFakeGateway(seed: Stored[] = []) {
     },
   };
 
-  return { gateway, store, calls };
+  return { gateway, store, calls, builds };
 }
 
 export function stored(partial: Partial<Stored> & Pick<Stored, "id">): Stored {
   return {
-    kind: partial.id.startsWith("sandbox_") ? "xcode" : "ios",
+    kind: partial.id.startsWith("sandbox_") || partial.id.startsWith("xcode_") ? "xcode" : "ios",
     labels: {},
     state: "ready",
     createdAt: "2026-11-16T10:00:00.000Z",

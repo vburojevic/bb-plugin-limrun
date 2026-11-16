@@ -63,16 +63,39 @@ export interface CreateIosOptions {
   model: "iphone" | "ipad";
 }
 
+/** One remote build or test run on an Xcode sandbox, as Limrun reports it. */
+export interface BuildState {
+  execId: string;
+  status: "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  exitCode: number | null;
+}
+
+export interface BuildEvent {
+  type: string;
+  data: string;
+}
+
 export interface LimrunGateway {
   list(kind: DeviceKind, options?: ListOptions): Promise<Device[]>;
   get(kind: DeviceKind, id: string): Promise<Device | null>;
   createIos(options: CreateIosOptions): Promise<Device>;
   /** Deletes; an instance that is already gone counts as deleted. */
   remove(kind: DeviceKind, id: string): Promise<void>;
-  /** Merges labels into a live instance. Returns the updated device, or null when gone. */
-  addLabels(kind: DeviceKind, id: string, labels: Record<string, string>): Promise<Device | null>;
   stream(id: string): Promise<StreamCredentials | null>;
   usage(options: { from: string; to: string }): Promise<Usage>;
+  /**
+   * The sandbox's latest build. Without `follow` it answers at once (replaying
+   * what the sandbox holds); with it, it streams to the build's end. Null when
+   * the sandbox has no build yet or is gone.
+   */
+  latestBuild(
+    sandboxId: string,
+    options: { execId?: string; follow: boolean; onEvent?: (event: BuildEvent) => void; signal?: AbortSignal },
+  ): Promise<BuildState | null>;
+  /** The tail of a build's log: the live stream while running, the stored log after. */
+  buildLog(sandboxId: string, execId: string): Promise<string | null>;
+  /** When a finished build started and ended, as Limrun recorded it. */
+  buildTimes(sandboxId: string, execId: string): Promise<{ startedAt: number; endedAt: number } | null>;
 }
 
 export const LIVE_STATES = ["creating", "assigned", "ready"] as const;
@@ -95,7 +118,7 @@ export function describeFailure(cause: unknown): LimrunFailure {
     const status = cause.status;
     if (status === 401 || status === 403) {
       return new LimrunFailure(
-        "Limrun rejected the API key. Sign in again with `lim login`, or set LIM_API_KEY for the bb server.",
+        "Limrun rejected this API key. Check it at console.limrun.com under Settings, API Keys, and paste it again on bb's Limrun page.",
         "key-rejected",
       );
     }
@@ -164,6 +187,19 @@ export function sumTotals(group: Record<string, Partial<UsageTotals>> | undefine
 
 export function createLimrunGateway(apiKey: string): LimrunGateway {
   const client = new Limrun({ apiKey, maxRetries: 1, timeout: 120_000 });
+  type XcodeClient = Awaited<ReturnType<typeof client.xcodeInstances.createClient>>;
+  const xcodeClients = new Map<string, Promise<XcodeClient>>();
+  const xcodeClient = (sandboxId: string): Promise<XcodeClient> => {
+    let pending = xcodeClients.get(sandboxId);
+    if (pending === undefined) {
+      pending = client.xcodeInstances
+        .get(sandboxId)
+        .then((instance) => client.xcodeInstances.createClient({ instance, logLevel: "none" }));
+      pending.catch(() => xcodeClients.delete(sandboxId));
+      xcodeClients.set(sandboxId, pending);
+    }
+    return pending;
+  };
   const resource = (kind: DeviceKind) => (kind === "ios" ? client.iosInstances : client.xcodeInstances);
 
   async function guarded<T>(work: () => Promise<T>): Promise<T> {
@@ -176,7 +212,7 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
 
   async function getRaw(kind: DeviceKind, id: string) {
     try {
-      return await resource(kind).get(id).withResponse();
+      return await resource(kind).get(id);
     } catch (cause) {
       if (cause instanceof APIError && cause.status === 404) return null;
       throw describeFailure(cause);
@@ -202,7 +238,7 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
 
     async get(kind, id) {
       const found = await getRaw(kind, id);
-      return found === null ? null : toDevice(kind, found.data as RawInstance);
+      return found === null ? null : toDevice(kind, found as RawInstance);
     },
 
     createIos: (options) =>
@@ -227,44 +263,59 @@ export function createLimrunGateway(apiKey: string): LimrunGateway {
       }
     },
 
-    async addLabels(kind, id, labels) {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const found = await getRaw(kind, id);
-        if (found === null) return null;
-        const current = found.data as RawInstance;
-        const existing = current.metadata.labels ?? {};
-        const missing = Object.entries(labels).some(([key, value]) => existing[key] !== value);
-        if (!missing) return toDevice(kind, current);
-        if (!LIVE_STATES.includes(current.status.state as (typeof LIVE_STATES)[number])) {
-          return toDevice(kind, current);
-        }
-        const etag = found.response.headers.get("etag");
-        if (etag === null) throw new LimrunFailure("Limrun returned no ETag for a label change.", "failed");
-        try {
-          await resource(kind).update(id, {
-            ifMatch: etag,
-            metadata: { labels: { ...existing, ...labels } },
-          });
-          return toDevice(kind, {
-            ...current,
-            metadata: { ...current.metadata, labels: { ...existing, ...labels } },
-          });
-        } catch (cause) {
-          if (cause instanceof APIError && cause.status === 412 && attempt === 0) continue;
-          if (cause instanceof APIError && cause.status === 404) return null;
-          throw describeFailure(cause);
-        }
-      }
-      return null;
-    },
-
     async stream(id) {
       const found = await getRaw("ios", id);
       if (found === null) return null;
-      const status = found.data.status as { state: string; endpointWebSocketUrl?: string; streamToken?: string };
+      const status = found.status as { state: string; endpointWebSocketUrl?: string; streamToken?: string };
       // Only the stream-only token goes to a browser, never the full-control `token`.
       if (status.state !== "ready" || !status.endpointWebSocketUrl || !status.streamToken) return null;
       return { url: status.endpointWebSocketUrl, token: status.streamToken };
+    },
+
+    async latestBuild(sandboxId, options) {
+      try {
+        const xcode = await xcodeClient(sandboxId);
+        const result = await xcode.observeBuildLogs(options.execId ?? "latest", {
+          follow: options.follow,
+          ...(options.onEvent ? { onEvent: (event) => options.onEvent!({ type: event.type, data: event.data }) } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
+        });
+        return { execId: result.execId, status: result.status, exitCode: result.exitCode ?? null };
+      } catch (cause) {
+        if (cause instanceof APIError && cause.status === 404) xcodeClients.delete(sandboxId);
+        return null;
+      }
+    },
+
+    async buildLog(sandboxId, execId) {
+      const chunks: string[] = [];
+      const live = await this.latestBuild(sandboxId, {
+        execId,
+        follow: false,
+        onEvent: (event) => {
+          if (event.type === "stdout" || event.type === "stderr") chunks.push(event.data);
+        },
+      });
+      if (live !== null && chunks.length > 0) return chunks.join("").slice(-64 * 1024);
+      try {
+        const stored = (await client.xcodeInstances.listBuildLogs(sandboxId)).find((log) => log.id === execId);
+        if (stored?.downloadUrl === undefined) return null;
+        const response = await fetch(stored.downloadUrl);
+        return response.ok ? (await response.text()).slice(-64 * 1024) : null;
+      } catch {
+        return null;
+      }
+    },
+
+    async buildTimes(sandboxId, execId) {
+      try {
+        const log = (await client.xcodeInstances.listBuildLogs(sandboxId)).find((entry) => entry.id === execId);
+        const startedAt = log?.startedAt === undefined ? NaN : Date.parse(log.startedAt);
+        const endedAt = log?.finishedAt === undefined ? NaN : Date.parse(log.finishedAt);
+        return Number.isFinite(startedAt) && Number.isFinite(endedAt) ? { startedAt, endedAt } : null;
+      } catch {
+        return null;
+      }
     },
 
     usage: (options) =>

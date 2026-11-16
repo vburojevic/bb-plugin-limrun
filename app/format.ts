@@ -3,7 +3,7 @@ import { LOST_AFTER_MS } from "../src/runs";
 
 /**
  * A run's status as of `now`. The server works "lost" out when it answers,
- * but an open card asks only on change signals, and a dead shim sends none.
+ * but an open card asks only on change signals, and a build bb stopped following sends none.
  */
 export function runStatus(run: RunDto, now: number): RunDto["status"] {
   return run.status === "running" && now - run.lastActivityAt > LOST_AFTER_MS ? "lost" : run.status;

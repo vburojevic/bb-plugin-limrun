@@ -1,10 +1,11 @@
 /**
  * The thread's Limrun tab: the simulator the thread owns, streamed with touch
  * and keyboard, plus start and stop. A thread's devices are the instances
- * labeled with its id, whoever started them: this panel, the agent through
- * the shim, or an agent that added the label itself.
+ * labeled with its id, whoever started them: this panel, or the agent of a
+ * thread that builds on Limrun (the server's proxy labels it).
  */
 import { useEffect, useMemo, useState } from "react";
+import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { RemoteControl, type RemoteControlConnectionState } from "@limrun/ui/lite";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ export function DevicePanel({ threadId }: { threadId: string }) {
     deps: [rpc, threadId],
   });
   const overview = useLimrunQuery(() => rpc.call("overview"), { threadId: null, deps: [rpc] });
+  const mode = useLimrunQuery(() => rpc.call("thread_mode", { threadId }), { threadId, deps: [rpc, threadId] });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -88,7 +90,7 @@ export function DevicePanel({ threadId }: { threadId: string }) {
           </div>
         </>
       ) : (
-        <EmptyState starting={starting} onStart={start} />
+        <EmptyState starting={starting} onStart={start} buildsOnLimrun={mode.data?.on ?? false} />
       )}
 
       {actionError !== null || state.data.error !== null ? (
@@ -267,9 +269,11 @@ function Stream({ threadId, device }: { threadId: string; device: DeviceDto }) {
 function EmptyState({
   starting,
   onStart,
+  buildsOnLimrun,
 }: {
   starting: ("iphone" | "ipad")[];
   onStart: (model: "iphone" | "ipad") => void;
+  buildsOnLimrun: boolean;
 }) {
   return (
     <Centered>
@@ -277,8 +281,10 @@ function EmptyState({
         <div className="space-y-1">
           <p className="text-sm font-medium">No Limrun simulator in this thread</p>
           <p className="text-xs text-muted-foreground">
-            Start one here, or let the agent run <code>lim ios create</code>. It shows here either way and stops
-            when the thread is archived.
+            {buildsOnLimrun
+              ? "Start one here, or ask the agent to run the app."
+              : "Start one here, or turn on Limrun in the composer and ask the agent to run the app."}{" "}
+            It stops when the thread is archived.
           </p>
         </div>
         <div className="flex justify-center gap-2">
@@ -301,14 +307,19 @@ function EmptyState({
 }
 
 function NotConnected({ message }: { message: string | null }) {
+  const navigate = useBbNavigate();
   return (
     <Centered>
-      <div className="max-w-sm space-y-2 text-center">
-        <p className="text-sm font-medium">Limrun is not connected</p>
-        <p className="text-xs text-muted-foreground">
-          {message ?? "Sign in with the lim CLI on the Mac running bb."}
-        </p>
-        <pre className="rounded-md bg-muted px-3 py-2 text-left text-xs">npm install --global lim{"\n"}lim login</pre>
+      <div className="max-w-sm space-y-3 text-center">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Limrun is not connected</p>
+          <p className="text-xs text-muted-foreground">
+            {message ?? "Paste a Limrun API key on the Limrun page to connect."}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => navigate.toPluginPanel("limrun")}>
+          Open the Limrun page
+        </Button>
       </div>
     </Centered>
   );

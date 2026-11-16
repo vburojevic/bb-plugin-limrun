@@ -1,5 +1,5 @@
 /**
- * The Limrun page in bb's sidebar: is Limrun connected, is the shim on,
+ * The Limrun page in bb's sidebar: is Limrun connected,
  * what has the org spent, and which devices are running right now.
  */
 import { useState } from "react";
@@ -7,6 +7,7 @@ import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 
 import type { DeviceDto, UsageDto } from "../src/contract";
 import { deviceMinutes, deviceName, minutes, money, stateLabel } from "./format";
@@ -25,34 +26,7 @@ export function OrgPage() {
           {overview.data === null ? (
             <Muted>{overview.error ?? "Checking…"}</Muted>
           ) : (
-            <div className="space-y-3 text-sm">
-              <p className="flex items-center gap-2">
-                <Icon name={overview.data.connected ? "CircleCheck" : "AlertCircle"} className="size-4" />
-                {overview.data.connected
-                  ? `Connected, using the key from ${overview.data.keySource === "env" ? "LIM_API_KEY" : "lim login"}.`
-                  : overview.data.error}
-              </p>
-              <div className="space-y-1">
-                <p className="flex items-center gap-2">
-                  <Icon name={overview.data.shim.installed ? "CircleCheck" : "Circle"} className="size-4" />
-                  {overview.data.shim.installed
-                    ? overview.data.shim.current
-                      ? "The lim shim is installed."
-                      : "The lim shim is outdated. Run bb limrun shim install."
-                    : "The lim shim is not installed. Without it, agents' devices and builds only show when they add the bb-thread label."}
-                </p>
-                {overview.data.shim.installed ? (
-                  <p className="pl-6 text-xs text-muted-foreground">
-                    It works in shells whose PATH starts with:{" "}
-                    <code className="break-all">{overview.data.shim.pathLine}</code>
-                  </p>
-                ) : (
-                  <p className="pl-6 text-xs text-muted-foreground">
-                    Run <code>bb limrun shim install</code> and add the PATH line it prints.
-                  </p>
-                )}
-              </div>
-            </div>
+            <Connection overview={overview.data} onChanged={overview.refetch} />
           )}
         </Section>
 
@@ -60,7 +34,7 @@ export function OrgPage() {
           {org.data === null ? (
             <Muted>{org.error ?? "Loading…"}</Muted>
           ) : org.data.error !== null ? (
-            <Muted>{org.data.error}</Muted>
+            <Muted>{overview.data?.connected === false ? "Connect Limrun to see usage." : org.data.error}</Muted>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <UsageTile label="Today" usage={org.data.today} />
@@ -93,6 +67,124 @@ export function OrgPage() {
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+const SOURCE: Record<string, string> = {
+  bb: "the key saved in bb",
+  env: "LIM_API_KEY on the bb server",
+  "lim-config": "lim login on the bb server's Mac",
+};
+
+function Connection({
+  overview,
+  onChanged,
+}: {
+  overview: { connected: boolean; keySource: string | null; error: string | null };
+  onChanged: () => void;
+}) {
+  const rpc = useLimrunRpc();
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (key.trim() === "" || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await rpc.call("set_api_key", { key: key.trim() });
+      if (result.connected) {
+        setKey("");
+        onChanged();
+      } else {
+        setError(result.error);
+      }
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (overview.connected) {
+    return (
+      <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm">
+        <Icon name="CircleCheck" className="size-4" />
+        <span className="min-w-0 flex-1">Connected, using {SOURCE[overview.keySource ?? ""] ?? "a Limrun key"}.</span>
+        {overview.keySource === "bb" ? (
+          confirming ? (
+            <>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+                Keep
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() =>
+                  void rpc.call("clear_api_key").then(
+                    () => {
+                      setConfirming(false);
+                      onChanged();
+                    },
+                    (cause) => {
+                      setConfirming(false);
+                      setError(errorText(cause));
+                    },
+                  )
+                }
+              >
+                Remove the key
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+              Remove key
+            </Button>
+          )
+        ) : null}
+      </div>
+      {error !== null ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={save} className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Paste a Limrun API key to connect. Create one at{" "}
+        <a href="https://console.limrun.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          console.limrun.com
+        </a>{" "}
+        under Settings, API Keys. It stays on the bb
+        server; agents and this page never see it again.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          type="password"
+          autoComplete="off"
+          value={key}
+          onChange={(event) => setKey(event.target.value)}
+          placeholder="lim_…"
+          aria-label="Limrun API key"
+        />
+        <Button type="submit" disabled={busy || key.trim() === ""}>
+          {busy ? "Checking…" : "Connect"}
+        </Button>
+      </div>
+      {error !== null || (overview.keySource !== null && overview.error !== null) ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error ?? overview.error}
+        </p>
+      ) : null}
+    </form>
+  );
 }
 
 function UsageTile({ label, usage }: { label: string; usage: UsageDto | null }) {
