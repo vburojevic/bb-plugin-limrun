@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-limrun",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Build on Limrun: iOS builds, tests and simulators for bb threads, in Limrun's cloud.",
   "license": "MIT",
