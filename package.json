@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-limrun",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Build on Limrun: iOS builds, tests and simulators for bb threads, in Limrun's cloud.",
   "license": "MIT",
@@ -16,7 +16,10 @@
     "name": "Limrun [Early access]",
     "description": "Turn on Build on Limrun for a thread and its agent builds, tests and runs iOS apps in Limrun's cloud from any machine. Watch the simulator beside the chat, follow builds above the composer, and devices stop when the thread is archived.",
     "branding": {
-      "icon": "Cloud"
+      "icon": "./assets/limrun.svg",
+      "experimental_icons": {
+        "limrun": "./assets/limrun.svg"
+      }
     },
     "server": "./server.ts",
     "app": "./app.tsx"

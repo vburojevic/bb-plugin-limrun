@@ -22,7 +22,7 @@
    ```
 
 2. Open the Limrun page in bb's sidebar and paste a Limrun API key (console.limrun.com, Settings, API Keys).
-3. In a new or existing thread of an iOS project, turn on the **Limrun** toggle in the composer, and ask the agent to build or run the app.
+3. In a new or existing thread of an iOS project, turn on the Limrun button in the composer (Limrun's `[ ]` mark; it turns orange when on), and ask the agent to build or run the app.
 
 That's all. You don't need `lim login`, PATH changes, or per-machine setup. Agents use `lim` if it's installed and otherwise run it through `npx` (Node 20 or later).
 

@@ -26,7 +26,7 @@ export default definePluginApp((app) => {
     id: "device",
     title: "Limrun",
     tooltip: "Limrun cloud simulator",
-    icon: "Cloud",
+    icon: "limrun/limrun",
     layout: "flush",
     component: DevicePanel,
   });
@@ -46,7 +46,7 @@ export default definePluginApp((app) => {
   app.slots.navPanel({
     id: "limrun",
     title: "Limrun",
-    icon: "Cloud",
+    icon: "limrun/limrun",
     path: "limrun",
     component: OrgPage,
   });
