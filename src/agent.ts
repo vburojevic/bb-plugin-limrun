@@ -48,7 +48,7 @@ export function agentInstructions(): string {
       ":",
     "- Build: `lim xcode build . --scheme <Scheme> --sdk iphonesimulator`. Test: `lim xcode test . --scheme <Scheme>`.",
     "- Run: `lim ios create --attach --reuse-if-exists` once; after that every successful build installs and relaunches on that simulator. Look and act with `lim ios screenshot`, `lim ios element-tree` and `lim ios tap-element`.",
-    "- Never run local `xcodebuild`, `xcrun simctl` or a local Simulator for those targets. macOS targets still build locally: Limrun has no macOS SDK.",
+    "- Never run local `xcodebuild`, `xcrun simctl` or a local Simulator for those targets. macOS targets still build and run locally: Limrun can't run Mac apps, and its machines block the last step of every Mac app build.",
     "- bb already set up lim for this thread through LIM_API_ENDPOINT, LIM_API_KEY and LIM_WORKSPACE. Never run `lim login`, change those variables, or print LIM_API_KEY.",
     `- Everything you create belongs to this thread: the person watches the simulator in the thread's Limrun tab, builds show above the composer, and all of it stops when the thread is archived. At most ${CAPS.ios} simulators and ${CAPS.xcode} Xcode sandbox run at a time; stop one you no longer need with \`lim ios delete <id>\`.`,
   ].join("\n");

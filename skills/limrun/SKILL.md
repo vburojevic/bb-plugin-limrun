@@ -17,7 +17,8 @@ LIM_API_KEY, LIM_WORKSPACE) and its instructions tell you how to build. Use
 - Run: `lim ios create --attach --reuse-if-exists` once; every successful
   build then installs and relaunches on that simulator.
 - Never run local `xcodebuild`, `xcrun simctl` or a local Simulator for iOS,
-  iPadOS or watchOS targets in such a thread. macOS targets build locally.
+  iPadOS or watchOS targets in such a thread. macOS targets build and run locally:
+  Limrun can't run Mac apps, and its machines block the last step of Mac app builds.
 - Never run `lim login`, change the LIM_* variables, or print LIM_API_KEY. It
   is a token for this thread only; the real key stays on the bb server.
 

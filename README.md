@@ -54,7 +54,7 @@ Every command takes `--json`.
 
 ## Good to know
 
-- iOS, iPadOS and watchOS only. macOS targets still build locally: Limrun's Xcode sandboxes have no macOS SDK. Android is not covered.
+- iOS, iPadOS and watchOS only. macOS targets still build locally. Limrun's cloud Macs do have the macOS SDK and compile Mac apps, but they block Xcode's last step of every Mac app build (registering the app with Launch Services), and Limrun has no Mac screen to run one on. Android is not covered.
 - A sandboxed agent shell needs network access to `*.limrun.com` and `*.limrun.net`, where builds sync and simulators stream.
 - `lim` reaches the proxy through `LIM_API_ENDPOINT`, which `lim` reads but Limrun doesn't document. The plugin pins and tests `lim` 0.57.3.
 - Without a key pasted in bb, the plugin falls back to `LIM_API_KEY` in the bb server's environment, then to `lim login` on the bb server's Mac.
