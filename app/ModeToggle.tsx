@@ -13,7 +13,6 @@ import { useState } from "react";
 import { useBbNavigate, useComposer } from "@get-bb/plugin-sdk/app";
 
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
 
 import { switchNote } from "../src/agent";
 import { errorText, useLimrunQuery, useLimrunRpc } from "./hooks";
@@ -36,6 +35,16 @@ export function ModeToggle() {
   return null;
 }
 
+/** Limrun's mark: its two square brackets, drawn from limrun.com's logo (assets/limrun.svg). */
+function LimrunMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+      <path d="M3.44 21V3H8.8V5.2H5.84V18.8H8.8V21Z" />
+      <path d="M15.2 21V18.8H18.16V5.2H15.2V3H20.56V21Z" />
+    </svg>
+  );
+}
+
 function Pill({
   on,
   busy,
@@ -52,16 +61,16 @@ function Pill({
       <Button
         type="button"
         variant="ghost"
-        size="sm"
+        size="icon"
         aria-pressed={on}
         aria-label="Build on Limrun"
         aria-description={title}
         disabled={busy}
         onClick={onClick}
-        className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+        className="size-7 text-muted-foreground"
       >
-        <Icon name="Cloud" className="size-3.5" />
-        Limrun
+        {/* Off it reads like bb's other composer controls; on, it takes Limrun's orange. */}
+        <LimrunMark className={on ? "size-[18px] text-[#FF5100]" : "size-[18px]"} />
       </Button>
     </span>
   );
